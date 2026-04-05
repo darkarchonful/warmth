@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    container_name: warmth-db
+    environment:
+      POSTGRES_DB: warmth
+      POSTGRES_USER: warmth
+      POSTGRES_PASSWORD: warmth_dev_2026
+    volumes:
+      - warmth_pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5435:5432"
+    restart: unless-stopped
+
+  api:
+    build: ./api
+    container_name: warmth-api
+    environment:
+      DATABASE_URL: postgres://warmth:warmth_dev_2026@db:5432/warmth
+      PORT: 3000
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      JWT_SECRET: ${JWT_SECRET:-warmth_jwt_dev_secret_2026}
+    ports:
+      - "3001:3000"
+    depends_on:
+      - db
+    restart: unless-stopped
+
+volumes:
+  warmth_pgdata:
