@@ -1,0 +1,32 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~6.1.2",
+    "expo": "~54.0.33",
+    "expo-auth-session": "^55.0.12",
+    "expo-constants": "^55.0.11",
+    "expo-crypto": "^55.0.12",
+    "expo-linking": "^55.0.11",
+    "expo-router": "^55.0.10",
+    "expo-secure-store": "^55.0.11",
+    "expo-status-bar": "~3.0.9",
+    "expo-web-browser": "^55.0.12",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "^2.31.0",
+    "react-native-reanimated": "^4.3.0",
+    "react-native-safe-area-context": "^5.7.0",
+    "react-native-screens": "^4.24.0",
+    "react-native-web": "^0.21.0"
+  },
+  "private": true
+}
