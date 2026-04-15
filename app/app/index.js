@@ -38,17 +38,23 @@ export default function Home() {
 
   // Dev login (skip Google for now)
   async function devLogin(name, email) {
+    console.log('[devLogin] start', name);
+    setError('Logging in...');
     try {
       const res = await fetch('http://81.200.154.252:3001/auth/dev', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email }),
       });
+      console.log('[devLogin] response', res.status);
       const data = await res.json();
+      console.log('[devLogin] data', data);
       await saveToken(data.token);
       setUser(data.user);
+      setError('');
     } catch (e) {
-      setError(e.message);
+      console.log('[devLogin] error', e.message);
+      setError('Error: ' + e.message);
     }
   }
 
@@ -85,6 +91,7 @@ export default function Home() {
         <Text style={styles.title}>Warmth</Text>
         <Text style={styles.subtitle}>Small gestures, real closeness</Text>
 
+        {error ? <Text style={styles.error}>{error}</Text> : null}
         <View style={styles.devBox}>
           <Text style={styles.devLabel}>Dev Login</Text>
           <TouchableOpacity
