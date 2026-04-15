@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import { colors } from '../lib/colors';
 import { api, loadToken, saveToken } from '../lib/api';
 
@@ -127,6 +128,16 @@ export default function Home() {
         <View style={styles.inviteBox}>
           <Text style={styles.inviteLabel}>Share this code:</Text>
           <Text style={styles.inviteCode}>{myInvite}</Text>
+          <TouchableOpacity
+            style={[styles.button, { marginTop: 12, paddingVertical: 10, paddingHorizontal: 24 }]}
+            onPress={async () => {
+              await Clipboard.setStringAsync(myInvite);
+              setError('Copied!');
+              setTimeout(() => setError(''), 1500);
+            }}
+          >
+            <Text style={styles.buttonText}>Copy</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
 
