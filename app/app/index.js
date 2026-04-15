@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, TextInput } from 'react-nativ
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { colors } from '../lib/colors';
-import { api, loadToken, saveToken } from '../lib/api';
+import { api, loadToken, saveToken, clearToken } from '../lib/api';
 
 export default function Home() {
   const router = useRouter();
@@ -117,6 +117,13 @@ export default function Home() {
     <View style={styles.container}>
       <Text style={styles.title}>Hi, {user.name}</Text>
       <Text style={styles.subtitle}>Pair with your partner</Text>
+
+      <TouchableOpacity
+        style={{ position: 'absolute', top: 50, right: 20 }}
+        onPress={async () => { await clearToken(); setUser(null); setCouple(null); setMyInvite(''); }}
+      >
+        <Text style={{ color: colors.textLight, fontSize: 14 }}>Logout</Text>
+      </TouchableOpacity>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
