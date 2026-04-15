@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
@@ -8,6 +9,7 @@ const crypto = require('crypto');
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use('/images/activities', express.static(path.join(__dirname, '..', 'public', 'activities')));
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);

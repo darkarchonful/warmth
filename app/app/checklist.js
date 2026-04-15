@@ -57,11 +57,11 @@ export default function Checklist() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>Back</Text>
+        <TouchableOpacity style={styles.headerSide} onPress={() => router.back()}>
+          <Text style={[styles.back, { textAlign: 'left' }]}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Our Plans</Text>
-        <View style={{ width: 40 }} />
+        <View style={styles.headerSide} />
       </View>
 
       {items.length === 0 ? (
@@ -88,11 +88,13 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 55,
+    paddingTop: 80,
     paddingHorizontal: 20,
     paddingBottom: 10,
+  },
+  headerSide: {
+    flex: 1,
   },
   back: {
     fontSize: 14,
@@ -100,9 +102,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   title: {
+    flex: 1,
     fontSize: 18,
     color: colors.text,
     fontWeight: '300',
+    textAlign: 'center',
   },
   item: {
     backgroundColor: colors.card,

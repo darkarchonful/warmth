@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-const API_URL = __DEV__ ? 'http://81.200.154.252:3001' : 'https://api.warmth.app';
+export const API_URL = __DEV__ ? 'http://81.200.154.252:3001' : 'https://api.warmth.app';
 
 let token = null;
 
