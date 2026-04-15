@@ -1,8 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, PanResponder } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, PanResponder, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../lib/colors';
-import { api } from '../lib/api';
+import { api, API_URL } from '../lib/api';
+
+function resolveImage(url) {
+  if (!url) return null;
+  return url.startsWith('http') ? url : `${API_URL}${url}`;
+}
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_W * 0.25;
@@ -152,12 +157,12 @@ export default function Swipe() {
   return (
     <View style={styles.container}>
       <View style={styles.nav}>
-        <TouchableOpacity onPress={() => router.push('/checklist')}>
-          <Text style={styles.navItem}>Plans</Text>
+        <TouchableOpacity style={styles.navSide} onPress={() => router.push('/checklist')}>
+          <Text style={[styles.navItem, { textAlign: 'left' }]}>Plans</Text>
         </TouchableOpacity>
         <Text style={styles.navTitle}>Warmth</Text>
-        <TouchableOpacity onPress={() => router.push('/memories')}>
-          <Text style={styles.navItem}>Memories</Text>
+        <TouchableOpacity style={styles.navSide} onPress={() => router.push('/memories')}>
+          <Text style={[styles.navItem, { textAlign: 'right' }]}>Memories</Text>
         </TouchableOpacity>
       </View>
 
@@ -168,9 +173,13 @@ export default function Swipe() {
           { transform: [{ translateX: pan.x }, { translateY: pan.y }, { rotate }] },
         ]}
       >
-        <View style={styles.cardImage}>
-          <Text style={styles.categoryIcon}>{getCategoryIcon(activity.category_name)}</Text>
-        </View>
+        {activity.image_url ? (
+          <Image source={{ uri: resolveImage(activity.image_url) }} style={styles.cardImage} resizeMode="cover" />
+        ) : (
+          <View style={styles.cardImage}>
+            <Text style={styles.categoryIcon}>{getCategoryIcon(activity.category_name)}</Text>
+          </View>
+        )}
         <View style={styles.cardContent}>
           <Text style={styles.category}>{activity.category_name}</Text>
           <Text style={styles.cardTitle}>{activity.title}</Text>
@@ -230,19 +239,23 @@ const styles = StyleSheet.create({
   },
   nav: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     width: '100%',
-    paddingTop: 50,
+    paddingTop: 80,
     paddingBottom: 10,
     position: 'absolute',
     top: 0,
     paddingHorizontal: 20,
   },
+  navSide: {
+    flex: 1,
+  },
   navTitle: {
+    flex: 1,
     fontSize: 18,
     color: colors.text,
     fontWeight: '300',
+    textAlign: 'center',
   },
   navItem: {
     fontSize: 14,
@@ -262,6 +275,7 @@ const styles = StyleSheet.create({
   },
   cardImage: {
     height: 280,
+    width: '100%',
     backgroundColor: colors.warm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -333,9 +347,9 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   swipeBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 36,
-    borderRadius: 25,
+    paddingVertical: 18,
+    paddingHorizontal: 48,
+    borderRadius: 30,
   },
   skipBtn: {
     backgroundColor: colors.card,
@@ -347,11 +361,11 @@ const styles = StyleSheet.create({
   },
   skipText: {
     color: colors.textLight,
-    fontSize: 16,
+    fontSize: 18,
   },
   loveText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '500',
   },
   blockedEmoji: {
