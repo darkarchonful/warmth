@@ -18,6 +18,9 @@ services:
   api:
     build: ./api
     container_name: warmth-api
+    command: npm run dev
+    volumes:
+      - ./api/src:/app/src
     environment:
       DATABASE_URL: postgres://warmth:warmth_dev_2026@db:5432/warmth
       PORT: 3000

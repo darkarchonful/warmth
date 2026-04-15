@@ -136,6 +136,13 @@ app.post('/couple/unpair', auth, async (req, res) => {
   res.json({ message: 'Unpaired' });
 });
 
+function currentSeason(month) {
+  if (month >= 3 && month <= 5) return 'spring';
+  if (month >= 6 && month <= 8) return 'summer';
+  if (month >= 9 && month <= 11) return 'autumn';
+  return 'winter';
+}
+
 // Get next activity to swipe
 app.get('/activities/next', auth, async (req, res) => {
   const couple = await pool.query(
@@ -156,7 +163,9 @@ app.get('/activities/next', auth, async (req, res) => {
     return res.json({ blocked: true, message: 'Complete an activity before swiping more' });
   }
 
-  // Get activity not yet swiped by this user
+  const season = currentSeason(new Date().getMonth() + 1);
+
+  // Get activity not yet swiped by this user, matching current season or year-round
   const activity = await pool.query(
     `SELECT a.*, c.name as category_name
      FROM activities a
@@ -164,9 +173,10 @@ app.get('/activities/next', auth, async (req, res) => {
      WHERE a.id NOT IN (
        SELECT activity_id FROM swipes WHERE user_id = $1 AND couple_id = $2
      )
+     AND ($3 = ANY(a.seasons) OR 'all' = ANY(a.seasons))
      ORDER BY RANDOM()
      LIMIT 1`,
-    [req.user.id, coupleId]
+    [req.user.id, coupleId, season]
   );
 
   if (activity.rows.length === 0) {

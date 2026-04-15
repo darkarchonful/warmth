@@ -16,6 +16,11 @@ export default function Swipe() {
   const [done, setDone] = useState(false);
 
   const pan = useRef(new Animated.ValueXY()).current;
+  const activityRef = useRef(null);
+
+  useEffect(() => {
+    activityRef.current = activity;
+  }, [activity]);
 
   useEffect(() => {
     loadNext();
@@ -41,11 +46,12 @@ export default function Swipe() {
   }
 
   async function handleSwipe(liked) {
-    if (!activity) return;
+    const current = activityRef.current;
+    if (!current) return;
     try {
-      const result = await api.swipe(activity.id, liked);
+      const result = await api.swipe(current.id, liked);
       if (result.match) {
-        setMatchPopup(activity.title);
+        setMatchPopup(current.title);
         setTimeout(() => {
           setMatchPopup(null);
           loadNext();
@@ -63,7 +69,9 @@ export default function Swipe() {
       toValue: { x: liked ? SCREEN_W * 1.5 : -SCREEN_W * 1.5, y: 0 },
       duration: 250,
       useNativeDriver: false,
-    }).start(() => handleSwipe(liked));
+    }).start(() => {
+      handleSwipe(liked);
+    });
   }
 
   const panResponder = useRef(
