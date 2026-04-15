@@ -39,7 +39,7 @@ export default function Home() {
   // Dev login (skip Google for now)
   async function devLogin(name, email) {
     try {
-      const res = await fetch('http://192.168.1.100:3001/auth/dev', {
+      const res = await fetch('http://81.200.154.252:3001/auth/dev', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email }),
