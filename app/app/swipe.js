@@ -1,16 +1,6 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, PanResponder } from 'react-native';
 import { useRouter } from 'expo-router';
-import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-  runOnJS,
-  interpolate,
-  Extrapolation,
-} from 'react-native-reanimated';
 import { colors } from '../lib/colors';
 import { api } from '../lib/api';
 
@@ -25,8 +15,7 @@ export default function Swipe() {
   const [matchPopup, setMatchPopup] = useState(null);
   const [done, setDone] = useState(false);
 
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
+  const pan = useRef(new Animated.ValueXY()).current;
 
   useEffect(() => {
     loadNext();
@@ -44,8 +33,7 @@ export default function Swipe() {
         setDone(true);
         return;
       }
-      translateX.value = 0;
-      translateY.value = 0;
+      pan.setValue({ x: 0, y: 0 });
       setActivity(data);
     } catch (e) {
       console.error(e);
@@ -70,53 +58,45 @@ export default function Swipe() {
     }
   }
 
-  function completeSwipe(liked) {
-    handleSwipe(liked);
+  function flyOff(liked) {
+    Animated.timing(pan, {
+      toValue: { x: liked ? SCREEN_W * 1.5 : -SCREEN_W * 1.5, y: 0 },
+      duration: 250,
+      useNativeDriver: false,
+    }).start(() => handleSwipe(liked));
   }
 
-  const pan = Gesture.Pan()
-    .onUpdate((e) => {
-      translateX.value = e.translationX;
-      translateY.value = e.translationY * 0.3;
-    })
-    .onEnd((e) => {
-      if (e.translationX > SWIPE_THRESHOLD) {
-        translateX.value = withTiming(SCREEN_W * 1.5, { duration: 250 }, () => {
-          runOnJS(completeSwipe)(true);
-        });
-      } else if (e.translationX < -SWIPE_THRESHOLD) {
-        translateX.value = withTiming(-SCREEN_W * 1.5, { duration: 250 }, () => {
-          runOnJS(completeSwipe)(false);
-        });
-      } else {
-        translateX.value = withSpring(0);
-        translateY.value = withSpring(0);
-      }
-    });
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 5,
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+      onPanResponderRelease: (_, g) => {
+        if (g.dx > SWIPE_THRESHOLD) {
+          flyOff(true);
+        } else if (g.dx < -SWIPE_THRESHOLD) {
+          flyOff(false);
+        } else {
+          Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
+        }
+      },
+    }),
+  ).current;
 
-  const cardStyle = useAnimatedStyle(() => {
-    const rotate = interpolate(
-      translateX.value,
-      [-SCREEN_W, 0, SCREEN_W],
-      [-15, 0, 15],
-      Extrapolation.CLAMP,
-    );
-    return {
-      transform: [
-        { translateX: translateX.value },
-        { translateY: translateY.value },
-        { rotate: `${rotate}deg` },
-      ],
-    };
+  const rotate = pan.x.interpolate({
+    inputRange: [-SCREEN_W, 0, SCREEN_W],
+    outputRange: ['-15deg', '0deg', '15deg'],
   });
-
-  const likeOverlayStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.value, [0, SWIPE_THRESHOLD], [0, 1], Extrapolation.CLAMP),
-  }));
-
-  const skipOverlayStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.value, [-SWIPE_THRESHOLD, 0], [1, 0], Extrapolation.CLAMP),
-  }));
+  const likeOpacity = pan.x.interpolate({
+    inputRange: [0, SWIPE_THRESHOLD],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const skipOpacity = pan.x.interpolate({
+    inputRange: [-SWIPE_THRESHOLD, 0],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
 
   if (blocked) {
     return (
@@ -173,38 +153,42 @@ export default function Swipe() {
         </TouchableOpacity>
       </View>
 
-      <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.card, cardStyle]}>
-          <View style={styles.cardImage}>
-            <Text style={styles.categoryIcon}>{getCategoryIcon(activity.category_name)}</Text>
-          </View>
-          <View style={styles.cardContent}>
-            <Text style={styles.category}>{activity.category_name}</Text>
-            <Text style={styles.cardTitle}>{activity.title}</Text>
-            <Text style={styles.cardTagline}>{activity.tagline}</Text>
-          </View>
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={[
+          styles.card,
+          { transform: [{ translateX: pan.x }, { translateY: pan.y }, { rotate }] },
+        ]}
+      >
+        <View style={styles.cardImage}>
+          <Text style={styles.categoryIcon}>{getCategoryIcon(activity.category_name)}</Text>
+        </View>
+        <View style={styles.cardContent}>
+          <Text style={styles.category}>{activity.category_name}</Text>
+          <Text style={styles.cardTitle}>{activity.title}</Text>
+          <Text style={styles.cardTagline}>{activity.tagline}</Text>
+        </View>
 
-          <Animated.View style={[styles.overlay, styles.likeOverlay, likeOverlayStyle]}>
-            <Text style={styles.likeText}>LOVE</Text>
-          </Animated.View>
-          <Animated.View style={[styles.overlay, styles.skipOverlay, skipOverlayStyle]}>
-            <Text style={styles.skipOverlayText}>SKIP</Text>
-          </Animated.View>
+        <Animated.View style={[styles.overlay, styles.likeOverlay, { opacity: likeOpacity }]}>
+          <Text style={styles.likeText}>LOVE</Text>
         </Animated.View>
-      </GestureDetector>
+        <Animated.View style={[styles.overlay, styles.skipOverlay, { opacity: skipOpacity }]}>
+          <Text style={styles.skipOverlayText}>SKIP</Text>
+        </Animated.View>
+      </Animated.View>
 
       <Text style={styles.swipeHint}>Swipe right if it warms you,{'\n'}left if not for now</Text>
 
       <View style={styles.buttons}>
         <TouchableOpacity
           style={[styles.swipeBtn, styles.skipBtn]}
-          onPress={() => handleSwipe(false)}
+          onPress={() => flyOff(false)}
         >
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.swipeBtn, styles.loveBtn]}
-          onPress={() => handleSwipe(true)}
+          onPress={() => flyOff(true)}
         >
           <Text style={styles.loveText}>Love this</Text>
         </TouchableOpacity>
@@ -311,12 +295,10 @@ const styles = StyleSheet.create({
   likeOverlay: {
     right: 24,
     borderColor: colors.accent,
-    transform: [{ rotate: '-15deg' }],
   },
   skipOverlay: {
     left: 24,
     borderColor: '#888',
-    transform: [{ rotate: '15deg' }],
   },
   likeText: {
     color: colors.accent,
