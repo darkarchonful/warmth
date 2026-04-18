@@ -1,6 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 
-export const API_URL = __DEV__ ? 'http://81.200.154.252:3001' : 'https://api.warmth.app';
+export const API_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  (__DEV__ ? 'http://81.200.154.252:3001' : 'https://warmth-api.dbtvault-solutions.tech');
 
 let token = null;
 
@@ -28,8 +30,10 @@ async function request(path, options = {}) {
     headers: { ...headers, ...options.headers },
   });
 
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  const text = await res.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { error: `HTTP ${res.status}` }; }
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
 
@@ -65,4 +69,7 @@ export const api = {
 
   // Memories
   getMemories: () => request('/memories'),
+
+  // Health (includes backend version)
+  health: () => request('/health'),
 };

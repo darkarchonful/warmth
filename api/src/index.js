@@ -324,7 +324,7 @@ app.get('/memories', auth, async (req, res) => {
 app.get('/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', version: process.env.APP_VERSION || 'dev' });
   } catch {
     res.status(500).json({ status: 'db error' });
   }

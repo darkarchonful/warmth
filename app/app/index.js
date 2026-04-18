@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, TextInput } from 'react-nativ
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { colors } from '../lib/colors';
-import { api, loadToken, saveToken, clearToken } from '../lib/api';
+import { api, API_URL, loadToken, saveToken, clearToken } from '../lib/api';
 
 export default function Home() {
   const router = useRouter();
@@ -39,22 +39,21 @@ export default function Home() {
 
   // Dev login (skip Google for now)
   async function devLogin(name, email) {
-    console.log('[devLogin] start', name);
     setError('Logging in...');
     try {
-      const res = await fetch('http://81.200.154.252:3001/auth/dev', {
+      const res = await fetch(`${API_URL}/auth/dev`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email }),
       });
-      console.log('[devLogin] response', res.status);
       const data = await res.json();
-      console.log('[devLogin] data', data);
       await saveToken(data.token);
-      setUser(data.user);
+      const me = await api.me();
+      setUser(me.user);
+      setCouple(me.couple);
       setError('');
+      if (me.couple?.paired_at) router.replace('/swipe');
     } catch (e) {
-      console.log('[devLogin] error', e.message);
       setError('Error: ' + e.message);
     }
   }

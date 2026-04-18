@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, PanResponder, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../lib/colors';
-import { api, API_URL } from '../lib/api';
+import { api, API_URL, clearToken } from '../lib/api';
 
 function resolveImage(url) {
   if (!url) return null;
@@ -19,6 +19,7 @@ export default function Swipe() {
   const [blockMessage, setBlockMessage] = useState('');
   const [matchPopup, setMatchPopup] = useState(null);
   const [done, setDone] = useState(false);
+  const [backendVersion, setBackendVersion] = useState('');
 
   const pan = useRef(new Animated.ValueXY()).current;
   const activityRef = useRef(null);
@@ -29,6 +30,7 @@ export default function Swipe() {
 
   useEffect(() => {
     loadNext();
+    api.health().then(d => setBackendVersion(d.version || '?')).catch(() => {});
   }, []);
 
   async function loadNext() {
@@ -160,7 +162,9 @@ export default function Swipe() {
         <TouchableOpacity style={styles.navSide} onPress={() => router.push('/checklist')}>
           <Text style={[styles.navItem, { textAlign: 'left' }]}>Plans</Text>
         </TouchableOpacity>
-        <Text style={styles.navTitle}>Warmth</Text>
+        <TouchableOpacity style={styles.navSide} onLongPress={async () => { await clearToken(); router.replace('/'); }}>
+          <Text style={styles.navTitle}>Warmth {backendVersion ? `· ${backendVersion}` : ''}</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.navSide} onPress={() => router.push('/memories')}>
           <Text style={[styles.navItem, { textAlign: 'right' }]}>Memories</Text>
         </TouchableOpacity>
