@@ -1,20 +1,29 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Dimensions } from 'react-native';
+import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
 import { colors } from '../lib/colors';
 import { api } from '../lib/api';
 
+const SCREEN_W = Dimensions.get('window').width;
+
 export default function Checklist() {
   const router = useRouter();
   const [items, setItems] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     load();
   }, []);
 
   async function load() {
-    const data = await api.getChecklist();
-    setItems(data);
+    setRefreshing(true);
+    try {
+      const data = await api.getChecklist();
+      setItems(data);
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   async function handleApprove(id) {
@@ -27,13 +36,28 @@ export default function Checklist() {
     load();
   }
 
+  async function handleDelete(id) {
+    setItems(prev => prev.filter(it => it.id !== id));
+    try { await api.deleteChecklist(id); } catch { load(); }
+  }
+
   function renderItem({ item }) {
     const partner = item.partner_name || 'Partner';
-    const youLabel = item.you_approved ? 'You ✓' : 'You pending';
-    const partnerLabel = item.partner_approved ? `${partner} ✓` : `${partner} pending`;
 
-    return (
-      <View style={styles.item}>
+    const stateRow = (youDone, partnerDone) => (
+      <Text style={styles.approvalLine}>
+        <Text style={youDone ? styles.stateDone : styles.statePending}>
+          You {youDone ? '✓' : 'pending'}
+        </Text>
+        {'   ·   '}
+        <Text style={partnerDone ? styles.stateDone : styles.statePending}>
+          {partner} {partnerDone ? '✓' : 'pending'}
+        </Text>
+      </Text>
+    );
+
+    const card = (
+      <View style={[styles.item, item.is_new && styles.itemNew]}>
         <View style={styles.itemHeader}>
           <Text style={styles.itemCategory}>{item.category_name}</Text>
           <Text style={[styles.status, styles[`status_${item.status}`]]}>
@@ -45,7 +69,7 @@ export default function Checklist() {
 
         {item.status === 'matched' && (
           <>
-            <Text style={styles.approvalLine}>{youLabel}  ·  {partnerLabel}</Text>
+            {stateRow(item.you_approved, item.partner_approved)}
             {!item.you_approved && (
               <TouchableOpacity style={styles.actionBtn} onPress={() => handleApprove(item.id)}>
                 <Text style={styles.actionText}>Approve this plan</Text>
@@ -59,9 +83,7 @@ export default function Checklist() {
 
         {item.status === 'approved' && (
           <>
-            <Text style={styles.approvalLine}>
-              {item.you_completed ? 'You ✓' : 'You pending'}  ·  {item.partner_completed ? `${partner} ✓` : `${partner} pending`}
-            </Text>
+            {stateRow(item.you_completed, item.partner_completed)}
             {!item.you_completed && (
               <TouchableOpacity style={[styles.actionBtn, styles.completeBtn]} onPress={() => handleComplete(item.id)}>
                 <Text style={styles.actionText}>We did it!</Text>
@@ -73,6 +95,22 @@ export default function Checklist() {
           </>
         )}
       </View>
+    );
+
+    if (item.status !== 'done') return card;
+
+    return (
+      <Swipeable
+        renderRightActions={() => (
+          <TouchableOpacity style={styles.deleteAction} onPress={() => handleDelete(item.id)}>
+            <Text style={styles.deleteActionText}>Delete</Text>
+          </TouchableOpacity>
+        )}
+        rightThreshold={SCREEN_W * 0.4}
+        onSwipeableOpen={(direction) => { if (direction === 'right') handleDelete(item.id); }}
+      >
+        {card}
+      </Swipeable>
     );
   }
 
@@ -97,6 +135,8 @@ export default function Checklist() {
           renderItem={renderItem}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={{ padding: 20 }}
+          refreshing={refreshing}
+          onRefresh={load}
         />
       )}
     </View>
@@ -139,6 +179,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 10,
     elevation: 2,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  itemNew: {
+    borderColor: colors.accent,
+  },
+  deleteAction: {
+    backgroundColor: '#e74c3c',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 90,
+    marginBottom: 12,
+    borderRadius: 16,
+  },
+  deleteActionText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
   },
   itemHeader: {
     flexDirection: 'row',
@@ -170,8 +228,14 @@ const styles = StyleSheet.create({
   },
   approvalLine: {
     fontSize: 13,
-    color: colors.textLight,
     marginBottom: 10,
+  },
+  stateDone: {
+    color: colors.success,
+    fontWeight: '600',
+  },
+  statePending: {
+    color: colors.textLight,
   },
   waitingLine: {
     fontSize: 13,

@@ -20,6 +20,8 @@ export default function Swipe() {
   const [matchPopup, setMatchPopup] = useState(null);
   const [done, setDone] = useState(false);
   const [backendVersion, setBackendVersion] = useState('');
+  const [unread, setUnread] = useState(0);
+  const [unreadMem, setUnreadMem] = useState(0);
 
   const pan = useRef(new Animated.ValueXY()).current;
   const activityRef = useRef(null);
@@ -32,7 +34,16 @@ export default function Swipe() {
     api.health().then(d => setBackendVersion(d.version || '?')).catch(() => {});
   }, []);
 
-  useFocusEffect(useCallback(() => { loadNext(); }, []));
+  useFocusEffect(useCallback(() => {
+    loadNext();
+    const tick = () => api.me().then(d => {
+      setUnread(d.unreadCount || 0);
+      setUnreadMem(d.unreadMemories || 0);
+    }).catch(() => {});
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => clearInterval(id);
+  }, []));
 
   async function loadNext() {
     try {
@@ -172,7 +183,10 @@ export default function Swipe() {
     <View style={styles.container}>
       <View style={styles.nav}>
         <TouchableOpacity style={styles.navSide} onPress={() => router.push('/checklist')}>
-          <Text style={[styles.navItem, { textAlign: 'left' }]}>Plans</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[styles.navItem, { textAlign: 'left' }]}>Plans</Text>
+            {unread > 0 && <View style={styles.unreadDot} />}
+          </View>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navSide} onLongPress={() => {
           Alert.alert('Warmth', '', [
@@ -191,7 +205,10 @@ export default function Swipe() {
           <Text style={styles.navTitle}>Warmth {backendVersion ? `· ${backendVersion}` : ''}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navSide} onPress={() => router.push('/memories')}>
-          <Text style={[styles.navItem, { textAlign: 'right' }]}>Memories</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+            <Text style={[styles.navItem, { textAlign: 'right' }]}>Memories</Text>
+            {unreadMem > 0 && <View style={styles.unreadDot} />}
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -290,6 +307,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.accent,
     fontWeight: '500',
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+    marginLeft: 6,
   },
   card: {
     backgroundColor: colors.card,

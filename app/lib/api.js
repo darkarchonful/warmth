@@ -66,9 +66,14 @@ export const api = {
   getChecklist: () => request('/checklist'),
   approve: (id) => request(`/checklist/${id}/approve`, { method: 'POST' }),
   complete: (id) => request(`/checklist/${id}/complete`, { method: 'POST' }),
+  deleteChecklist: (id) => request(`/checklist/${id}`, { method: 'DELETE' }),
 
   // Memories
   getMemories: () => request('/memories'),
+  updateMemory: (id, patch) => request(`/memories/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  }),
 
   // Health (includes backend version)
   health: () => request('/health'),
