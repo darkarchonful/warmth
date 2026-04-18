@@ -1,6 +1,6 @@
 -- Warmth App Database Schema
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     google_id VARCHAR(255) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -10,7 +10,7 @@ CREATE TABLE users (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE couples (
+CREATE TABLE IF NOT EXISTS couples (
     id SERIAL PRIMARY KEY,
     user_a_id INTEGER REFERENCES users(id) NOT NULL,
     user_b_id INTEGER REFERENCES users(id),
@@ -22,7 +22,7 @@ CREATE TABLE couples (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     icon VARCHAR(50)
@@ -39,7 +39,7 @@ INSERT INTO categories (name, icon) VALUES
     ('Food', 'utensils'),
     ('Sporty', 'bike');
 
-CREATE TABLE activities (
+CREATE TABLE IF NOT EXISTS activities (
     id SERIAL PRIMARY KEY,
     category_id INTEGER REFERENCES categories(id),
     title VARCHAR(255) NOT NULL,
@@ -114,7 +114,7 @@ INSERT INTO activities (category_id, title, tagline) VALUES
     (9, 'Swimming at sunset', 'Warm water, golden light'),
     (9, 'Rock climbing', 'Trust each other on the wall');
 
-CREATE TABLE swipes (
+CREATE TABLE IF NOT EXISTS swipes (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) NOT NULL,
     couple_id INTEGER REFERENCES couples(id) NOT NULL,
@@ -124,7 +124,7 @@ CREATE TABLE swipes (
     UNIQUE(user_id, couple_id, activity_id)
 );
 
-CREATE TABLE checklist (
+CREATE TABLE IF NOT EXISTS checklist (
     id SERIAL PRIMARY KEY,
     couple_id INTEGER REFERENCES couples(id) NOT NULL,
     activity_id INTEGER REFERENCES activities(id) NOT NULL,
@@ -139,7 +139,7 @@ CREATE TABLE checklist (
     -- matched -> approved -> done
 );
 
-CREATE TABLE memories (
+CREATE TABLE IF NOT EXISTS memories (
     id SERIAL PRIMARY KEY,
     couple_id INTEGER REFERENCES couples(id) NOT NULL,
     checklist_id INTEGER REFERENCES checklist(id) NOT NULL,

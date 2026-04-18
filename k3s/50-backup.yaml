@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: warmth-backups-pv
+  labels:
+    app: warmth-backups
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /opt/warmth-backups
+    type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: tier
+              operator: In
+              values: ["backup"]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: warmth-backups
+  namespace: warmth
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ""
+  resources:
+    requests:
+      storage: 5Gi
+  selector:
+    matchLabels:
+      app: warmth-backups
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: warmth-db-backup
+  namespace: warmth
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          nodeSelector:
+            tier: backup
+          restartPolicy: OnFailure
+          containers:
+            - name: pgdump
+              image: postgres:15
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: warmth-secrets
+                      key: postgres-password
+              command:
+                - sh
+                - -c
+                - |
+                  set -e
+                  TS=$(date +%Y%m%d-%H%M%S)
+                  OUT=/backups/warmth-$TS.dump
+                  pg_dump -h postgres-warmth -U warmth -d warmth -Fc -f "$OUT"
+                  cd /backups && ls -1t warmth-*.dump 2>/dev/null | tail -n +49 | xargs -r rm
+                  echo "OK $OUT $(du -h "$OUT" | cut -f1)"
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: warmth-backups

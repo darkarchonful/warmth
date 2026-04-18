@@ -3,3 +3,5 @@ node_modules/
 dist/
 *.env
 .DS_Store
+.secret-*
+k3s/10-secrets.yaml
