@@ -15,6 +15,15 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET;
 
+const INVITE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+function generateInviteCode() {
+  let code = '';
+  for (let i = 0; i < 7; i++) {
+    code += INVITE_ALPHABET[crypto.randomInt(0, INVITE_ALPHABET.length)];
+  }
+  return code;
+}
+
 // Auth middleware
 function auth(req, res, next) {
   const token = req.headers.authorization?.replace('Bearer ', '');
@@ -85,57 +94,118 @@ app.get('/me', auth, async (req, res) => {
   res.json({ user: user.rows[0], couple: couple.rows[0] || null });
 });
 
-// Create invite (start a couple)
+// Create invite (start a couple). If user already has a pending invite
+// (user_b_id IS NULL), rotate the code instead of rejecting.
 app.post('/couple/create', auth, async (req, res) => {
   const existing = await pool.query(
-    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    'SELECT id, user_b_id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
     [req.user.id]
   );
   if (existing.rows.length > 0) {
-    return res.status(400).json({ error: 'Already in a couple' });
+    const row = existing.rows[0];
+    if (row.user_b_id) {
+      return res.status(400).json({ error: 'Already in a couple' });
+    }
+    const rotated = await pool.query(
+      'UPDATE couples SET invite_code = $1, created_at = NOW() WHERE id = $2 RETURNING id, invite_code',
+      [generateInviteCode(), row.id]
+    );
+    return res.json(rotated.rows[0]);
   }
 
-  const inviteCode = crypto.randomBytes(5).toString('hex');
   const result = await pool.query(
     'INSERT INTO couples (user_a_id, invite_code) VALUES ($1, $2) RETURNING id, invite_code',
-    [req.user.id, inviteCode]
+    [req.user.id, generateInviteCode()]
   );
   res.json(result.rows[0]);
 });
 
-// Join couple via invite code
+// Join couple via invite code. Case-insensitive. Rejects expired (>7d) or
+// used codes, self-invite, and users who are in a real pair. A user's own
+// pending invite (if any) is auto-cancelled when they accept someone else's.
 app.post('/couple/join', auth, async (req, res) => {
-  const { inviteCode } = req.body;
-  const couple = await pool.query(
-    'SELECT * FROM couples WHERE invite_code = $1 AND active = TRUE AND user_b_id IS NULL',
-    [inviteCode]
-  );
-  if (couple.rows.length === 0) {
-    return res.status(404).json({ error: 'Invalid or used invite code' });
-  }
-  if (couple.rows[0].user_a_id === req.user.id) {
-    return res.status(400).json({ error: 'Cannot pair with yourself' });
-  }
+  const code = (req.body.inviteCode || '').trim().toUpperCase();
+  if (!code) return res.status(400).json({ error: 'No invite code' });
 
-  const result = await pool.query(
-    'UPDATE couples SET user_b_id = $1, paired_at = NOW() WHERE id = $2 RETURNING *',
-    [req.user.id, couple.rows[0].id]
-  );
-  res.json(result.rows[0]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const pair = await client.query(
+      `SELECT id FROM couples
+       WHERE (user_a_id = $1 OR user_b_id = $1)
+         AND active = TRUE AND user_b_id IS NOT NULL`,
+      [req.user.id]
+    );
+    if (pair.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Already in a couple' });
+    }
+    const couple = await client.query(
+      `SELECT * FROM couples
+       WHERE invite_code = $1 AND active = TRUE AND user_b_id IS NULL
+         AND created_at > NOW() - INTERVAL '7 days'
+       FOR UPDATE`,
+      [code]
+    );
+    if (couple.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Invalid, used, or expired invite code' });
+    }
+    if (couple.rows[0].user_a_id === req.user.id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Cannot pair with yourself' });
+    }
+    await client.query(
+      `UPDATE couples SET active = FALSE
+       WHERE user_a_id = $1 AND active = TRUE AND user_b_id IS NULL AND id <> $2`,
+      [req.user.id, couple.rows[0].id]
+    );
+    const result = await client.query(
+      'UPDATE couples SET user_b_id = $1, paired_at = NOW() WHERE id = $2 RETURNING *',
+      [req.user.id, couple.rows[0].id]
+    );
+    await client.query('COMMIT');
+    res.json(result.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
 });
 
-// Unpair (either person can leave)
+// Unpair (either person can leave, one-sided). Wipes shared state:
+// swipes, checklist, memories. Couple row stays with active=false for history.
 app.post('/couple/unpair', auth, async (req, res) => {
-  const result = await pool.query(
-    `UPDATE couples SET active = FALSE, ended_at = NOW(), ended_by = $1
-     WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE
-     RETURNING id`,
-    [req.user.id]
-  );
-  if (result.rows.length === 0) {
-    return res.status(404).json({ error: 'No active couple' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const couple = await client.query(
+      `SELECT id FROM couples
+       WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE
+       FOR UPDATE`,
+      [req.user.id]
+    );
+    if (couple.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'No active couple' });
+    }
+    const coupleId = couple.rows[0].id;
+    await client.query('DELETE FROM memories WHERE couple_id = $1', [coupleId]);
+    await client.query('DELETE FROM checklist WHERE couple_id = $1', [coupleId]);
+    await client.query('DELETE FROM swipes WHERE couple_id = $1', [coupleId]);
+    await client.query(
+      'UPDATE couples SET active = FALSE, ended_at = NOW(), ended_by = $1 WHERE id = $2',
+      [req.user.id, coupleId]
+    );
+    await client.query('COMMIT');
+    res.json({ message: 'Unpaired' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
-  res.json({ message: 'Unpaired' });
 });
 
 function currentSeason(month) {
@@ -227,13 +297,21 @@ app.post('/activities/:id/swipe', auth, async (req, res) => {
   res.json({ match: false });
 });
 
-// Get checklist
+// Get checklist. Each item carries per-viewer fields so the UI can show
+// who's approved/completed and who's still pending.
 app.get('/checklist', auth, async (req, res) => {
   const couple = await pool.query(
-    'SELECT id, user_a_id, user_b_id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    `SELECT c.id, c.user_a_id,
+            CASE WHEN c.user_a_id = $1 THEN ub.name ELSE ua.name END as partner_name
+     FROM couples c
+     JOIN users ua ON ua.id = c.user_a_id
+     LEFT JOIN users ub ON ub.id = c.user_b_id
+     WHERE (c.user_a_id = $1 OR c.user_b_id = $1) AND c.active = TRUE`,
     [req.user.id]
   );
   if (couple.rows.length === 0) return res.json([]);
+  const { id: coupleId, user_a_id, partner_name } = couple.rows[0];
+  const isA = user_a_id === req.user.id;
 
   const items = await pool.query(
     `SELECT cl.*, a.title, a.tagline, a.image_url, c.name as category_name
@@ -244,9 +322,16 @@ app.get('/checklist', auth, async (req, res) => {
      ORDER BY
        CASE cl.status WHEN 'approved' THEN 1 WHEN 'matched' THEN 2 WHEN 'done' THEN 3 END,
        cl.matched_at DESC`,
-    [couple.rows[0].id]
+    [coupleId]
   );
-  res.json(items.rows);
+  res.json(items.rows.map(r => ({
+    ...r,
+    you_approved: isA ? r.approved_by_a : r.approved_by_b,
+    partner_approved: isA ? r.approved_by_b : r.approved_by_a,
+    you_completed: isA ? r.completed_by_a : r.completed_by_b,
+    partner_completed: isA ? r.completed_by_b : r.completed_by_a,
+    partner_name,
+  })));
 });
 
 // Approve checklist item
