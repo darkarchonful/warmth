@@ -28,6 +28,10 @@ export default function Checklist() {
   }
 
   function renderItem({ item }) {
+    const partner = item.partner_name || 'Partner';
+    const youLabel = item.you_approved ? 'You ✓' : 'You pending';
+    const partnerLabel = item.partner_approved ? `${partner} ✓` : `${partner} pending`;
+
     return (
       <View style={styles.item}>
         <View style={styles.itemHeader}>
@@ -40,15 +44,33 @@ export default function Checklist() {
         <Text style={styles.itemTagline}>{item.tagline}</Text>
 
         {item.status === 'matched' && (
-          <TouchableOpacity style={styles.actionBtn} onPress={() => handleApprove(item.id)}>
-            <Text style={styles.actionText}>Approve this plan</Text>
-          </TouchableOpacity>
+          <>
+            <Text style={styles.approvalLine}>{youLabel}  ·  {partnerLabel}</Text>
+            {!item.you_approved && (
+              <TouchableOpacity style={styles.actionBtn} onPress={() => handleApprove(item.id)}>
+                <Text style={styles.actionText}>Approve this plan</Text>
+              </TouchableOpacity>
+            )}
+            {item.you_approved && !item.partner_approved && (
+              <Text style={styles.waitingLine}>Waiting for {partner}</Text>
+            )}
+          </>
         )}
 
         {item.status === 'approved' && (
-          <TouchableOpacity style={[styles.actionBtn, styles.completeBtn]} onPress={() => handleComplete(item.id)}>
-            <Text style={styles.actionText}>We did it!</Text>
-          </TouchableOpacity>
+          <>
+            <Text style={styles.approvalLine}>
+              {item.you_completed ? 'You ✓' : 'You pending'}  ·  {item.partner_completed ? `${partner} ✓` : `${partner} pending`}
+            </Text>
+            {!item.you_completed && (
+              <TouchableOpacity style={[styles.actionBtn, styles.completeBtn]} onPress={() => handleComplete(item.id)}>
+                <Text style={styles.actionText}>We did it!</Text>
+              </TouchableOpacity>
+            )}
+            {item.you_completed && !item.partner_completed && (
+              <Text style={styles.waitingLine}>Waiting for {partner}</Text>
+            )}
+          </>
         )}
       </View>
     );
@@ -145,6 +167,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textLight,
     marginBottom: 12,
+  },
+  approvalLine: {
+    fontSize: 13,
+    color: colors.textLight,
+    marginBottom: 10,
+  },
+  waitingLine: {
+    fontSize: 13,
+    color: colors.textMuted,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 4,
   },
   actionBtn: {
     backgroundColor: colors.accent,

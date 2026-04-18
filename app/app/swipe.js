@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, PanResponder, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, PanResponder, Image, Alert } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../lib/colors';
 import { api, API_URL, clearToken } from '../lib/api';
 
@@ -29,25 +29,37 @@ export default function Swipe() {
   }, [activity]);
 
   useEffect(() => {
-    loadNext();
     api.health().then(d => setBackendVersion(d.version || '?')).catch(() => {});
   }, []);
+
+  useFocusEffect(useCallback(() => { loadNext(); }, []));
 
   async function loadNext() {
     try {
       const data = await api.nextActivity();
+      if (data.error && /not in a couple/i.test(data.error)) {
+        router.replace('/');
+        return;
+      }
       if (data.blocked) {
         setBlocked(true);
         setBlockMessage(data.message);
         return;
       }
       if (data.done) {
+        setBlocked(false);
         setDone(true);
         return;
       }
+      setBlocked(false);
+      setDone(false);
       pan.setValue({ x: 0, y: 0 });
       setActivity(data);
     } catch (e) {
+      if (/not in a couple/i.test(e.message || '')) {
+        router.replace('/');
+        return;
+      }
       console.error(e);
     }
   }
@@ -162,7 +174,20 @@ export default function Swipe() {
         <TouchableOpacity style={styles.navSide} onPress={() => router.push('/checklist')}>
           <Text style={[styles.navItem, { textAlign: 'left' }]}>Plans</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navSide} onLongPress={async () => { await clearToken(); router.replace('/'); }}>
+        <TouchableOpacity style={styles.navSide} onLongPress={() => {
+          Alert.alert('Warmth', '', [
+            { text: 'Unpair', style: 'destructive', onPress: () => {
+              Alert.alert('Unpair?', 'This will end the pairing and delete your swipes and shared plans. Your partner will see the app as unpaired.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Unpair', style: 'destructive', onPress: async () => {
+                  try { await api.unpair(); router.replace('/'); } catch (e) { Alert.alert('Error', e.message); }
+                } },
+              ]);
+            } },
+            { text: 'Log out', onPress: async () => { await clearToken(); router.replace('/'); } },
+            { text: 'Cancel', style: 'cancel' },
+          ]);
+        }}>
           <Text style={styles.navTitle}>Warmth {backendVersion ? `· ${backendVersion}` : ''}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navSide} onPress={() => router.push('/memories')}>
