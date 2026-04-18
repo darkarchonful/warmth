@@ -78,9 +78,12 @@ app.post('/auth/dev', async (req, res) => {
   res.json({ token, user });
 });
 
-// Get current user + couple status
+// Get current user + couple status + unread plan changes
 app.get('/me', auth, async (req, res) => {
-  const user = await pool.query('SELECT id, email, name, avatar_url FROM users WHERE id = $1', [req.user.id]);
+  const user = await pool.query(
+    'SELECT id, email, name, avatar_url, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
+    [req.user.id]
+  );
   const couple = await pool.query(
     `SELECT c.*,
        CASE WHEN c.user_a_id = $1 THEN ub.name ELSE ua.name END as partner_name
@@ -91,7 +94,30 @@ app.get('/me', auth, async (req, res) => {
      LIMIT 1`,
     [req.user.id]
   );
-  res.json({ user: user.rows[0], couple: couple.rows[0] || null });
+  let unreadCount = 0;
+  let unreadMemories = 0;
+  if (couple.rows[0]) {
+    const cid = couple.rows[0].id;
+    const lastSeen = user.rows[0].last_checklist_viewed_at;
+    const lastSeenM = user.rows[0].last_memories_viewed_at;
+    const [a, b] = await Promise.all([
+      pool.query(
+        lastSeen
+          ? 'SELECT COUNT(*)::int AS n FROM checklist WHERE couple_id = $1 AND updated_at > $2'
+          : 'SELECT COUNT(*)::int AS n FROM checklist WHERE couple_id = $1',
+        lastSeen ? [cid, lastSeen] : [cid]
+      ),
+      pool.query(
+        lastSeenM
+          ? 'SELECT COUNT(*)::int AS n FROM memories WHERE couple_id = $1 AND updated_at > $2'
+          : 'SELECT COUNT(*)::int AS n FROM memories WHERE couple_id = $1',
+        lastSeenM ? [cid, lastSeenM] : [cid]
+      ),
+    ]);
+    unreadCount = a.rows[0].n;
+    unreadMemories = b.rows[0].n;
+  }
+  res.json({ user: user.rows[0], couple: couple.rows[0] || null, unreadCount, unreadMemories });
 });
 
 // Create invite (start a couple). If user already has a pending invite
@@ -320,18 +346,32 @@ app.get('/checklist', auth, async (req, res) => {
      JOIN categories c ON c.id = a.category_id
      WHERE cl.couple_id = $1
      ORDER BY
-       CASE cl.status WHEN 'approved' THEN 1 WHEN 'matched' THEN 2 WHEN 'done' THEN 3 END,
-       cl.matched_at DESC`,
+       CASE cl.status WHEN 'done' THEN 1 ELSE 0 END,
+       cl.updated_at DESC`,
     [coupleId]
   );
-  res.json(items.rows.map(r => ({
+  const lastSeen = await pool.query(
+    'SELECT last_checklist_viewed_at FROM users WHERE id = $1',
+    [req.user.id]
+  );
+  const seenAt = lastSeen.rows[0].last_checklist_viewed_at;
+
+  const payload = items.rows.map(r => ({
     ...r,
     you_approved: isA ? r.approved_by_a : r.approved_by_b,
     partner_approved: isA ? r.approved_by_b : r.approved_by_a,
     you_completed: isA ? r.completed_by_a : r.completed_by_b,
     partner_completed: isA ? r.completed_by_b : r.completed_by_a,
     partner_name,
-  })));
+    is_new: !seenAt || new Date(r.updated_at) > new Date(seenAt),
+  }));
+
+  await pool.query(
+    'UPDATE users SET last_checklist_viewed_at = NOW() WHERE id = $1',
+    [req.user.id]
+  );
+
+  res.json(payload);
 });
 
 // Approve checklist item
@@ -346,12 +386,17 @@ app.post('/checklist/:id/approve', auth, async (req, res) => {
   const isA = c.user_a_id === req.user.id;
   const field = isA ? 'approved_by_a' : 'approved_by_b';
 
-  await pool.query(`UPDATE checklist SET ${field} = TRUE WHERE id = $1 AND couple_id = $2`, [req.params.id, c.id]);
+  await pool.query(
+    `UPDATE checklist SET ${field} = TRUE, updated_at = NOW() WHERE id = $1 AND couple_id = $2`,
+    [req.params.id, c.id]
+  );
 
-  // Check if both approved
   const item = await pool.query('SELECT * FROM checklist WHERE id = $1', [req.params.id]);
   if (item.rows[0].approved_by_a && item.rows[0].approved_by_b) {
-    await pool.query("UPDATE checklist SET status = 'approved', approved_at = NOW() WHERE id = $1", [req.params.id]);
+    await pool.query(
+      "UPDATE checklist SET status = 'approved', approved_at = NOW(), updated_at = NOW() WHERE id = $1",
+      [req.params.id]
+    );
   }
 
   res.json({ approved: true });
@@ -369,14 +414,26 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
   const isA = c.user_a_id === req.user.id;
   const field = isA ? 'completed_by_a' : 'completed_by_b';
 
-  await pool.query(`UPDATE checklist SET ${field} = TRUE WHERE id = $1 AND couple_id = $2`, [req.params.id, c.id]);
+  await pool.query(
+    `UPDATE checklist SET ${field} = TRUE, updated_at = NOW() WHERE id = $1 AND couple_id = $2`,
+    [req.params.id, c.id]
+  );
 
   const item = await pool.query('SELECT * FROM checklist WHERE id = $1', [req.params.id]);
   if (item.rows[0].completed_by_a && item.rows[0].completed_by_b) {
-    await pool.query("UPDATE checklist SET status = 'done', completed_at = NOW() WHERE id = $1", [req.params.id]);
-    // Create memory
     await pool.query(
-      'INSERT INTO memories (couple_id, checklist_id) VALUES ($1, $2)',
+      "UPDATE checklist SET status = 'done', completed_at = NOW(), updated_at = NOW() WHERE id = $1",
+      [req.params.id]
+    );
+    // Create memory with denormalized activity info so it survives
+    // checklist cleanup as a permanent scrapbook entry.
+    await pool.query(
+      `INSERT INTO memories (couple_id, checklist_id, activity_title, activity_tagline, activity_image_url, activity_category)
+       SELECT $1, $2, a.title, a.tagline, a.image_url, cat.name
+       FROM activities a
+       JOIN categories cat ON cat.id = a.category_id
+       JOIN checklist cl ON cl.activity_id = a.id
+       WHERE cl.id = $2`,
       [c.id, req.params.id]
     );
   }
@@ -384,25 +441,104 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
   res.json({ completed: true });
 });
 
-// Get memories
-app.get('/memories', auth, async (req, res) => {
+// Delete a done checklist item (and its memory). Rejected for items that
+// aren't done — unapproved / planned items must be unpaired-only.
+app.delete('/checklist/:id', auth, async (req, res) => {
   const couple = await pool.query(
     'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
     [req.user.id]
   );
+  if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
+
+  const item = await pool.query(
+    'SELECT id, status FROM checklist WHERE id = $1 AND couple_id = $2',
+    [req.params.id, couple.rows[0].id]
+  );
+  if (item.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+  if (item.rows[0].status !== 'done') return res.status(400).json({ error: 'Only done items can be deleted' });
+
+  // Memory row stays (FK ON DELETE SET NULL) — deleting a checklist item
+  // just clears it from the active list, the scrapbook keeps the entry.
+  await pool.query('DELETE FROM checklist WHERE id = $1', [req.params.id]);
+  res.json({ deleted: true });
+});
+
+// Get memories. Each row carries per-viewer fields so the UI can show
+// "you" vs "partner" ratings/moods/notes without leaking side assignment.
+app.get('/memories', auth, async (req, res) => {
+  const couple = await pool.query(
+    `SELECT c.id, c.user_a_id,
+            CASE WHEN c.user_a_id = $1 THEN ub.name ELSE ua.name END as partner_name
+     FROM couples c
+     JOIN users ua ON ua.id = c.user_a_id
+     LEFT JOIN users ub ON ub.id = c.user_b_id
+     WHERE (c.user_a_id = $1 OR c.user_b_id = $1) AND c.active = TRUE`,
+    [req.user.id]
+  );
   if (couple.rows.length === 0) return res.json([]);
+  const { id: cid, user_a_id, partner_name } = couple.rows[0];
+  const isA = user_a_id === req.user.id;
 
   const memories = await pool.query(
-    `SELECT m.*, a.title, a.tagline, a.image_url, c.name as category_name
-     FROM memories m
-     JOIN checklist cl ON cl.id = m.checklist_id
-     JOIN activities a ON a.id = cl.activity_id
-     JOIN categories c ON c.id = a.category_id
-     WHERE m.couple_id = $1
-     ORDER BY m.completed_at DESC`,
-    [couple.rows[0].id]
+    `SELECT id, couple_id, checklist_id, photo_url, completed_at, updated_at,
+            activity_title AS title, activity_tagline AS tagline,
+            activity_image_url AS image_url, activity_category AS category_name,
+            rating_a, rating_b, mood_a, mood_b, note_a, note_b
+     FROM memories
+     WHERE couple_id = $1
+     ORDER BY completed_at DESC`,
+    [cid]
   );
-  res.json(memories.rows);
+  const seen = await pool.query('SELECT last_memories_viewed_at FROM users WHERE id = $1', [req.user.id]);
+  const seenAt = seen.rows[0].last_memories_viewed_at;
+
+  const payload = memories.rows.map(r => ({
+    id: r.id, couple_id: r.couple_id, checklist_id: r.checklist_id,
+    photo_url: r.photo_url, completed_at: r.completed_at, updated_at: r.updated_at,
+    title: r.title, tagline: r.tagline, image_url: r.image_url, category_name: r.category_name,
+    you_rating: isA ? r.rating_a : r.rating_b,
+    partner_rating: isA ? r.rating_b : r.rating_a,
+    you_mood: isA ? r.mood_a : r.mood_b,
+    partner_mood: isA ? r.mood_b : r.mood_a,
+    you_note: isA ? r.note_a : r.note_b,
+    partner_note: isA ? r.note_b : r.note_a,
+    partner_name,
+    is_new: !seenAt || new Date(r.updated_at) > new Date(seenAt),
+  }));
+  await pool.query('UPDATE users SET last_memories_viewed_at = NOW() WHERE id = $1', [req.user.id]);
+  res.json(payload);
+});
+
+// Update the caller's own rating / mood / note on a memory. Each partner
+// edits only their own side.
+app.patch('/memories/:id', auth, async (req, res) => {
+  const { note, rating, mood } = req.body;
+  const couple = await pool.query(
+    'SELECT id, user_a_id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    [req.user.id]
+  );
+  if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
+  const isA = couple.rows[0].user_a_id === req.user.id;
+  const suffix = isA ? '_a' : '_b';
+
+  const fields = [];
+  const values = [];
+  if (note !== undefined) { fields.push(`note${suffix} = $${values.length + 1}`); values.push(note); }
+  if (rating !== undefined) {
+    if (rating !== null && (rating < 1 || rating > 5)) return res.status(400).json({ error: 'Rating must be 1-5' });
+    fields.push(`rating${suffix} = $${values.length + 1}`); values.push(rating);
+  }
+  if (mood !== undefined) { fields.push(`mood${suffix} = $${values.length + 1}`); values.push(mood); }
+  if (fields.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+  fields.push(`updated_at = NOW()`);
+  values.push(req.params.id, couple.rows[0].id);
+  const result = await pool.query(
+    `UPDATE memories SET ${fields.join(', ')} WHERE id = $${values.length - 1} AND couple_id = $${values.length} RETURNING *`,
+    values
+  );
+  if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+  res.json(result.rows[0]);
 });
 
 // Health check

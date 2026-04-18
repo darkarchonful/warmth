@@ -1,0 +1,15 @@
+ALTER TABLE memories
+  ADD COLUMN IF NOT EXISTS rating_a INT,
+  ADD COLUMN IF NOT EXISTS rating_b INT,
+  ADD COLUMN IF NOT EXISTS mood_a TEXT,
+  ADD COLUMN IF NOT EXISTS mood_b TEXT,
+  ADD COLUMN IF NOT EXISTS note_a TEXT,
+  ADD COLUMN IF NOT EXISTS note_b TEXT;
+
+UPDATE memories SET rating_a = rating WHERE rating IS NOT NULL AND rating_a IS NULL;
+UPDATE memories SET mood_a = mood WHERE mood IS NOT NULL AND mood_a IS NULL;
+UPDATE memories SET note_a = note WHERE note IS NOT NULL AND note_a IS NULL;
+
+ALTER TABLE memories DROP COLUMN IF EXISTS rating;
+ALTER TABLE memories DROP COLUMN IF EXISTS mood;
+ALTER TABLE memories DROP COLUMN IF EXISTS note;
