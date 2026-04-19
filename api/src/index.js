@@ -261,9 +261,62 @@ app.get('/activities/next', auth, async (req, res) => {
     return res.json({ blocked: true, message: 'Complete an activity before swiping more' });
   }
 
+  // Daily ration with spread days and completion bonus.
+  // Spread-day heuristic: ~1/3 of days, fewer cards early, full cap by evening.
+  const BASE_CAP = parseInt(process.env.DAILY_SWIPE_LIMIT || '8', 10);
+  const today = new Date();
+  const dateKey = today.toISOString().slice(0, 10);
+  const hash = (req.user.id * 31 + parseInt(dateKey.replace(/-/g, ''), 10)) % 3;
+  const spreadDay = hash === 0;
+  const hour = today.getHours();
+  let cap = BASE_CAP;
+  if (spreadDay) {
+    if (hour < 12) cap = 3;
+    else if (hour < 18) cap = 6;
+    else cap = BASE_CAP;
+  }
+  const doneToday = await pool.query(
+    "SELECT COUNT(*)::int AS n FROM checklist WHERE couple_id = $1 AND status = 'done' AND updated_at::date = CURRENT_DATE",
+    [coupleId]
+  );
+  cap += doneToday.rows[0].n;
+
+  const swipedToday = await pool.query(
+    "SELECT COUNT(*)::int AS n FROM swipes WHERE user_id = $1 AND swiped_at::date = CURRENT_DATE",
+    [req.user.id]
+  );
+  if (swipedToday.rows[0].n >= cap) {
+    const preview = await pool.query(
+      `SELECT image_url FROM activities
+       WHERE image_url IS NOT NULL AND id NOT IN (
+         SELECT activity_id FROM swipes WHERE user_id = $1 AND couple_id = $2
+       )
+       ORDER BY RANDOM() LIMIT 4`,
+      [req.user.id, coupleId]
+    );
+    return res.json({
+      blocked: true,
+      message: spreadDay && hour < 18
+        ? 'Come back later — a few more unlock tonight'
+        : 'That\'s enough for today — new ideas tomorrow',
+      preview_images: preview.rows.map(r => r.image_url),
+    });
+  }
+
   const season = currentSeason(new Date().getMonth() + 1);
 
-  // Fetch batch of 5 activities so frontend can queue + prefetch ahead
+  // Bias easy activities for new couples: show easier cards first.
+  // After ~10 swipes the mix opens up to all difficulties.
+  const totalSwipes = await pool.query(
+    'SELECT COUNT(*)::int AS n FROM swipes WHERE couple_id = $1',
+    [coupleId]
+  );
+  const swipeCount = totalSwipes.rows[0].n;
+  let maxDifficulty = 2;
+  if (swipeCount >= 20) maxDifficulty = 5;
+  else if (swipeCount >= 10) maxDifficulty = 3;
+  else if (swipeCount >= 5) maxDifficulty = 2;
+
   const activities = await pool.query(
     `SELECT a.*, c.name as category_name
      FROM activities a
@@ -272,9 +325,10 @@ app.get('/activities/next', auth, async (req, res) => {
        SELECT activity_id FROM swipes WHERE user_id = $1 AND couple_id = $2
      )
      AND ($3 = ANY(a.seasons) OR 'all' = ANY(a.seasons))
-     ORDER BY RANDOM()
+     AND a.difficulty <= $4
+     ORDER BY a.difficulty, RANDOM()
      LIMIT 5`,
-    [req.user.id, coupleId, season]
+    [req.user.id, coupleId, season, maxDifficulty]
   );
 
   if (activities.rows.length === 0) {

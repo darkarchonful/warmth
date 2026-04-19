@@ -17,6 +17,7 @@ export default function Swipe() {
   const [activity, setActivity] = useState(null);
   const [blocked, setBlocked] = useState(false);
   const [blockMessage, setBlockMessage] = useState('');
+  const [previewImages, setPreviewImages] = useState([]);
   const [matchPopup, setMatchPopup] = useState(null);
   const [done, setDone] = useState(false);
   const [backendVersion, setBackendVersion] = useState('');
@@ -84,6 +85,7 @@ export default function Swipe() {
       if (data.blocked) {
         setBlocked(true);
         setBlockMessage(data.message);
+        setPreviewImages(data.preview_images || []);
         return;
       }
       if (data.done) {
@@ -93,6 +95,7 @@ export default function Swipe() {
       }
       const incoming = Array.isArray(data.queue) ? data.queue : [data];
       const existing = new Set(queueRef.current.map(a => a.id));
+      if (activityRef.current?.id) existing.add(activityRef.current.id);
       queueRef.current.push(...incoming.filter(a => !existing.has(a.id)));
       if (setFirst && queueRef.current.length > 0) {
         const first = queueRef.current.shift();
@@ -173,10 +176,18 @@ export default function Swipe() {
   });
 
   if (blocked) {
+    const isComeBack = previewImages.length > 0;
     return (
       <View style={styles.container}>
-        <Text style={styles.blockedEmoji}>✨</Text>
-        <Text style={styles.blockedTitle}>Time to act</Text>
+        {isComeBack && (
+          <View style={styles.previewRow}>
+            {previewImages.map((url, i) => (
+              <AnimatedPreviewCard key={i} url={resolveImage(url)} index={i} />
+            ))}
+          </View>
+        )}
+        <Text style={styles.blockedEmoji}>{isComeBack ? '🌙' : '✨'}</Text>
+        <Text style={styles.blockedTitle}>{isComeBack ? 'That\'s enough for today' : 'Time to act'}</Text>
         <Text style={styles.blockedText}>{blockMessage}</Text>
         <TouchableOpacity
           style={styles.button}
@@ -309,6 +320,41 @@ export default function Swipe() {
         </TouchableOpacity>
       </View>
     </View>
+  );
+}
+
+function AnimatedPreviewCard({ url, index }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+  const float = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const p = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 2200, delay: index * 180, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 2200, useNativeDriver: true }),
+      ])
+    );
+    const f = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float, { toValue: 1, duration: 3000 + index * 200, useNativeDriver: true }),
+        Animated.timing(float, { toValue: 0, duration: 3000 + index * 200, useNativeDriver: true }),
+      ])
+    );
+    p.start(); f.start();
+    return () => { p.stop(); f.stop(); };
+  }, []);
+  return (
+    <Animated.Image
+      source={{ uri: url }}
+      style={[styles.previewImg, {
+        opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0.85] }),
+        transform: [
+          { translateY: float.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
+          { scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.02] }) },
+        ],
+      }]}
+      blurRadius={22}
+      resizeMode="cover"
+    />
   );
 }
 
@@ -470,6 +516,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '500',
+  },
+  previewRow: {
+    flexDirection: 'row',
+    marginBottom: 30,
+  },
+  previewImg: {
+    width: 70,
+    height: 90,
+    borderRadius: 10,
+    marginHorizontal: 4,
+    backgroundColor: colors.warm,
+    opacity: 0.7,
   },
   blockedEmoji: {
     fontSize: 60,
