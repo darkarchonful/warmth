@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, KeyboardAvoidingView, Platform, ScrollView, Keyboard, TouchableWithoutFeedback, Share } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
 import { colors } from '../lib/colors';
 import { api, API_URL, loadToken, saveToken, clearToken } from '../lib/api';
 import Toast from '../components/Toast';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function Home() {
   const router = useRouter();
@@ -14,6 +18,30 @@ export default function Home() {
   const [myInvite, setMyInvite] = useState('');
   const [error, setError] = useState('');
   const [waitingDots, setWaitingDots] = useState('');
+
+  const [, googleResp, promptGoogle] = Google.useIdTokenAuthRequest({
+    clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+  });
+
+  useEffect(() => {
+    if (googleResp?.type !== 'success') return;
+    const idToken = googleResp.params?.id_token || googleResp.authentication?.idToken;
+    if (!idToken) return;
+    (async () => {
+      try {
+        const data = await api.authGoogle(idToken);
+        await saveToken(data.token);
+        const me = await api.me();
+        setUser(me.user);
+        setCouple(me.couple);
+        setError('');
+        if (me.couple?.paired_at) router.replace('/swipe');
+      } catch (e) {
+        setError('Google sign-in failed: ' + e.message);
+      }
+    })();
+  }, [googleResp]);
 
   useEffect(() => {
     init();
@@ -115,6 +143,14 @@ export default function Home() {
         <Text style={styles.subtitle}>Small gestures, real closeness</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <TouchableOpacity
+          style={styles.googleButton}
+          onPress={() => promptGoogle()}
+        >
+          <Text style={styles.googleButtonText}>Continue with Google</Text>
+        </TouchableOpacity>
+
         <View style={styles.devBox}>
           <Text style={styles.devLabel}>Dev Login</Text>
           <TouchableOpacity
@@ -309,5 +345,19 @@ const styles = StyleSheet.create({
   error: {
     color: '#c44',
     marginBottom: 16,
+  },
+  googleButton: {
+    backgroundColor: '#fff',
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    marginBottom: 20,
+  },
+  googleButtonText: {
+    color: '#444',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
