@@ -263,8 +263,8 @@ app.get('/activities/next', auth, async (req, res) => {
 
   const season = currentSeason(new Date().getMonth() + 1);
 
-  // Get activity not yet swiped by this user, matching current season or year-round
-  const activity = await pool.query(
+  // Fetch batch of 5 activities so frontend can queue + prefetch ahead
+  const activities = await pool.query(
     `SELECT a.*, c.name as category_name
      FROM activities a
      JOIN categories c ON c.id = a.category_id
@@ -273,14 +273,14 @@ app.get('/activities/next', auth, async (req, res) => {
      )
      AND ($3 = ANY(a.seasons) OR 'all' = ANY(a.seasons))
      ORDER BY RANDOM()
-     LIMIT 1`,
+     LIMIT 5`,
     [req.user.id, coupleId, season]
   );
 
-  if (activity.rows.length === 0) {
+  if (activities.rows.length === 0) {
     return res.json({ done: true, message: 'No more activities to swipe' });
   }
-  res.json(activity.rows[0]);
+  res.json({ queue: activities.rows });
 });
 
 // Swipe on activity

@@ -25,10 +25,18 @@ export default function Swipe() {
 
   const pan = useRef(new Animated.ValueXY()).current;
   const activityRef = useRef(null);
+  const queueRef = useRef([]);
+  const titleScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     activityRef.current = activity;
   }, [activity]);
+
+  function prefetchUpcoming() {
+    queueRef.current.slice(0, 3).forEach(a => {
+      if (a.image_url) Image.prefetch(resolveImage(a.image_url));
+    });
+  }
 
   useEffect(() => {
     api.health().then(d => setBackendVersion(d.version || '?')).catch(() => {});
@@ -46,6 +54,20 @@ export default function Swipe() {
   }, []));
 
   async function loadNext() {
+    if (queueRef.current.length > 0) {
+      const next = queueRef.current.shift();
+      setBlocked(false);
+      setDone(false);
+      pan.setValue({ x: 0, y: 0 });
+      setActivity(next);
+      prefetchUpcoming();
+      if (queueRef.current.length <= 2) refillQueue();
+      return;
+    }
+    await refillQueue({ setFirst: true });
+  }
+
+  async function refillQueue({ setFirst = false } = {}) {
     try {
       const data = await api.nextActivity();
       if (data.error && /not in a couple/i.test(data.error)) {
@@ -62,10 +84,17 @@ export default function Swipe() {
         setDone(true);
         return;
       }
-      setBlocked(false);
-      setDone(false);
-      pan.setValue({ x: 0, y: 0 });
-      setActivity(data);
+      const incoming = Array.isArray(data.queue) ? data.queue : [data];
+      const existing = new Set(queueRef.current.map(a => a.id));
+      queueRef.current.push(...incoming.filter(a => !existing.has(a.id)));
+      if (setFirst && queueRef.current.length > 0) {
+        const first = queueRef.current.shift();
+        setBlocked(false);
+        setDone(false);
+        pan.setValue({ x: 0, y: 0 });
+        setActivity(first);
+      }
+      prefetchUpcoming();
     } catch (e) {
       if (/not in a couple/i.test(e.message || '')) {
         router.replace('/');
@@ -188,7 +217,16 @@ export default function Swipe() {
             {unread > 0 && <View style={styles.unreadDot} />}
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navSide} onLongPress={() => {
+        <TouchableOpacity
+          style={styles.navSide}
+          delayLongPress={600}
+          onPressIn={() => {
+            Animated.timing(titleScale, { toValue: 1.2, duration: 600, useNativeDriver: true }).start();
+          }}
+          onPressOut={() => {
+            Animated.timing(titleScale, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+          }}
+          onLongPress={() => {
           Alert.alert('Warmth', '', [
             { text: 'Unpair', style: 'destructive', onPress: () => {
               Alert.alert('Unpair?', 'This will end the pairing and delete your swipes and shared plans. Your partner will see the app as unpaired.', [
@@ -202,7 +240,9 @@ export default function Swipe() {
             { text: 'Cancel', style: 'cancel' },
           ]);
         }}>
-          <Text style={styles.navTitle}>Warmth {backendVersion ? `· ${backendVersion}` : ''}</Text>
+          <Animated.Text style={[styles.navTitle, {
+            transform: [{ scale: titleScale }],
+          }]}>Warmth {backendVersion ? `· ${backendVersion}` : ''}</Animated.Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navSide} onPress={() => router.push('/memories')}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
@@ -220,9 +260,9 @@ export default function Swipe() {
         ]}
       >
         {activity.image_url ? (
-          <Image source={{ uri: resolveImage(activity.image_url) }} style={styles.cardImage} resizeMode="cover" />
+          <Image key={activity.id} source={{ uri: resolveImage(activity.image_url) }} style={styles.cardImage} resizeMode="cover" />
         ) : (
-          <View style={styles.cardImage}>
+          <View key={activity.id} style={styles.cardImage}>
             <Text style={styles.categoryIcon}>{getCategoryIcon(activity.category_name)}</Text>
           </View>
         )}
@@ -239,8 +279,6 @@ export default function Swipe() {
           <Text style={styles.skipOverlayText}>SKIP</Text>
         </Animated.View>
       </Animated.View>
-
-      <Text style={styles.swipeHint}>Swipe right if it warms you,{'\n'}left if not for now</Text>
 
       <View style={styles.buttons}>
         <TouchableOpacity
@@ -280,18 +318,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 80,
+    paddingBottom: 60,
   },
   nav: {
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    paddingTop: 80,
-    paddingBottom: 10,
-    position: 'absolute',
-    top: 0,
-    paddingHorizontal: 20,
   },
   navSide: {
     flex: 1,
@@ -327,7 +362,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   cardImage: {
-    height: 280,
+    aspectRatio: 1 / 1,
     width: '100%',
     backgroundColor: colors.warm,
     alignItems: 'center',
