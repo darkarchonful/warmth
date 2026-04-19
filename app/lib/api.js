@@ -75,6 +75,13 @@ export const api = {
     body: JSON.stringify(patch),
   }),
 
+  // Comments
+  getComments: (parentType, id) => request(`/comments/${parentType}/${id}`),
+  addComment: (parentType, id, text) => request(`/comments/${parentType}/${id}`, {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  }),
+
   // Health (includes backend version)
   health: () => request('/health'),
 };

@@ -261,9 +261,62 @@ app.get('/activities/next', auth, async (req, res) => {
     return res.json({ blocked: true, message: 'Complete an activity before swiping more' });
   }
 
+  // Daily ration with spread days and completion bonus.
+  // Spread-day heuristic: ~1/3 of days, fewer cards early, full cap by evening.
+  const BASE_CAP = parseInt(process.env.DAILY_SWIPE_LIMIT || '8', 10);
+  const today = new Date();
+  const dateKey = today.toISOString().slice(0, 10);
+  const hash = (req.user.id * 31 + parseInt(dateKey.replace(/-/g, ''), 10)) % 3;
+  const spreadDay = hash === 0;
+  const hour = today.getHours();
+  let cap = BASE_CAP;
+  if (spreadDay) {
+    if (hour < 12) cap = 3;
+    else if (hour < 18) cap = 6;
+    else cap = BASE_CAP;
+  }
+  const doneToday = await pool.query(
+    "SELECT COUNT(*)::int AS n FROM checklist WHERE couple_id = $1 AND status = 'done' AND updated_at::date = CURRENT_DATE",
+    [coupleId]
+  );
+  cap += doneToday.rows[0].n;
+
+  const swipedToday = await pool.query(
+    "SELECT COUNT(*)::int AS n FROM swipes WHERE user_id = $1 AND swiped_at::date = CURRENT_DATE",
+    [req.user.id]
+  );
+  if (swipedToday.rows[0].n >= cap) {
+    const preview = await pool.query(
+      `SELECT image_url FROM activities
+       WHERE image_url IS NOT NULL AND id NOT IN (
+         SELECT activity_id FROM swipes WHERE user_id = $1 AND couple_id = $2
+       )
+       ORDER BY RANDOM() LIMIT 4`,
+      [req.user.id, coupleId]
+    );
+    return res.json({
+      blocked: true,
+      message: spreadDay && hour < 18
+        ? 'Come back later — a few more unlock tonight'
+        : 'That\'s enough for today — new ideas tomorrow',
+      preview_images: preview.rows.map(r => r.image_url),
+    });
+  }
+
   const season = currentSeason(new Date().getMonth() + 1);
 
-  // Fetch batch of 5 activities so frontend can queue + prefetch ahead
+  // Bias easy activities for new couples: show easier cards first.
+  // After ~10 swipes the mix opens up to all difficulties.
+  const totalSwipes = await pool.query(
+    'SELECT COUNT(*)::int AS n FROM swipes WHERE couple_id = $1',
+    [coupleId]
+  );
+  const swipeCount = totalSwipes.rows[0].n;
+  let maxDifficulty = 2;
+  if (swipeCount >= 20) maxDifficulty = 5;
+  else if (swipeCount >= 10) maxDifficulty = 3;
+  else if (swipeCount >= 5) maxDifficulty = 2;
+
   const activities = await pool.query(
     `SELECT a.*, c.name as category_name
      FROM activities a
@@ -272,9 +325,10 @@ app.get('/activities/next', auth, async (req, res) => {
        SELECT activity_id FROM swipes WHERE user_id = $1 AND couple_id = $2
      )
      AND ($3 = ANY(a.seasons) OR 'all' = ANY(a.seasons))
-     ORDER BY RANDOM()
+     AND a.difficulty <= $4
+     ORDER BY a.difficulty, RANDOM()
      LIMIT 5`,
-    [req.user.id, coupleId, season]
+    [req.user.id, coupleId, season, maxDifficulty]
   );
 
   if (activities.rows.length === 0) {
@@ -539,6 +593,66 @@ app.patch('/memories/:id', auth, async (req, res) => {
   );
   if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
   res.json(result.rows[0]);
+});
+
+// Comments: shared with helper. parentType is 'plan' (checklist) or 'memory'.
+async function loadCoupleForParent(userId, parentType, parentId) {
+  const table = parentType === 'plan' ? 'checklist' : 'memories';
+  const row = await pool.query(
+    `SELECT t.*, c.user_a_id, c.user_b_id
+     FROM ${table} t
+     JOIN couples c ON c.id = t.couple_id
+     WHERE t.id = $1 AND (c.user_a_id = $2 OR c.user_b_id = $2) AND c.active = TRUE`,
+    [parentId, userId]
+  );
+  return row.rows[0];
+}
+
+app.get('/comments/:parentType/:id', auth, async (req, res) => {
+  const { parentType, id } = req.params;
+  if (!['plan', 'memory'].includes(parentType)) return res.status(400).json({ error: 'Invalid type' });
+  const parent = await loadCoupleForParent(req.user.id, parentType, id);
+  if (!parent) return res.status(404).json({ error: 'Not found' });
+
+  const list = await pool.query(
+    `SELECT c.id, c.text, c.user_id, c.created_at, u.name as user_name
+     FROM comments c JOIN users u ON u.id = c.user_id
+     WHERE c.parent_type = $1 AND c.parent_id = $2
+     ORDER BY c.created_at ASC`,
+    [parentType, id]
+  );
+
+  // Partner's last-seen timestamp (for read-receipt ✓✓ on my comments)
+  const isA = parent.user_a_id === req.user.id;
+  const partnerSeenAt = isA ? parent.last_comment_seen_b : parent.last_comment_seen_a;
+
+  // Mark this user as having seen comments for this item
+  const table = parentType === 'plan' ? 'checklist' : 'memories';
+  const col = isA ? 'last_comment_seen_a' : 'last_comment_seen_b';
+  await pool.query(`UPDATE ${table} SET ${col} = now() WHERE id = $1`, [id]);
+
+  res.json({ comments: list.rows, partner_last_seen_at: partnerSeenAt });
+});
+
+app.post('/comments/:parentType/:id', auth, async (req, res) => {
+  const { parentType, id } = req.params;
+  const text = (req.body.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'Empty' });
+  if (!['plan', 'memory'].includes(parentType)) return res.status(400).json({ error: 'Invalid type' });
+  const parent = await loadCoupleForParent(req.user.id, parentType, id);
+  if (!parent) return res.status(404).json({ error: 'Not found' });
+
+  const table = parentType === 'plan' ? 'checklist' : 'memories';
+  const col = parent.user_a_id === req.user.id ? 'last_comment_seen_a' : 'last_comment_seen_b';
+  const result = await pool.query(
+    `INSERT INTO comments (parent_type, parent_id, user_id, text) VALUES ($1, $2, $3, $4) RETURNING id, created_at`,
+    [parentType, id, req.user.id, text]
+  );
+  // Bump parent.updated_at so nav dot + list ordering refresh for partner.
+  // Caller marks themselves as having seen their own comment.
+  await pool.query(`UPDATE ${table} SET updated_at = now(), ${col} = now() WHERE id = $1`, [id]);
+
+  res.json({ id: result.rows[0].id, created_at: result.rows[0].created_at });
 });
 
 // Health check
