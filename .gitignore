@@ -5,3 +5,5 @@ dist/
 .DS_Store
 .secret-*
 k3s/10-secrets.yaml
+api/public/activities/orig/
+mj_prompts*.txt
