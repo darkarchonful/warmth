@@ -32,13 +32,13 @@ spec:
         - name: ghcr-pull
       containers:
         - name: api
-          image: ghcr.io/darkarchonful/warmth-api:v5
+          image: ghcr.io/darkarchonful/warmth-api:v6
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
             - name: APP_VERSION
-              value: "v5"
+              value: "v6"
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
