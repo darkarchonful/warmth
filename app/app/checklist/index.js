@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Dimensions } from 'react-native';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
-import { colors } from '../lib/colors';
-import { api } from '../lib/api';
+import { colors } from '../../lib/colors';
+import { api } from '../../lib/api';
 
 const SCREEN_W = Dimensions.get('window').width;
 
@@ -57,7 +57,11 @@ export default function Checklist() {
     );
 
     const card = (
-      <View style={[styles.item, item.is_new && styles.itemNew]}>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => router.push(`/checklist/${item.id}`)}
+        style={[styles.item, item.is_new && styles.itemNew]}
+      >
         <View style={styles.itemHeader}>
           <Text style={styles.itemCategory}>{item.category_name}</Text>
           <Text style={[styles.status, styles[`status_${item.status}`]]}>
@@ -94,7 +98,7 @@ export default function Checklist() {
             )}
           </>
         )}
-      </View>
+      </TouchableOpacity>
     );
 
     if (item.status !== 'done') return card;

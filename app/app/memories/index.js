@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { colors } from '../lib/colors';
-import { api } from '../lib/api';
+import { colors } from '../../lib/colors';
+import { api } from '../../lib/api';
 
 const MOODS = ['😍', '🥰', '😊', '🙂', '😐', '😬', '😅', '🌧️', '🔥', '⭐'];
 
@@ -60,7 +60,11 @@ export default function Memories() {
       </View>
     );
     return (
-      <TouchableOpacity onPress={() => openEditor(item)} style={[styles.item, item.is_new && styles.itemNew]}>
+      <TouchableOpacity
+        onPress={() => router.push(`/memories/${item.id}`)}
+        onLongPress={() => openEditor(item)}
+        style={[styles.item, item.is_new && styles.itemNew]}
+      >
         <Text style={styles.date}>{formatDate(item.completed_at)}</Text>
         <Text style={styles.itemTitle}>{item.title}</Text>
         <Text style={styles.itemTagline}>{item.tagline}</Text>

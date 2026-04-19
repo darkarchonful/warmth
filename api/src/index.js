@@ -541,6 +541,66 @@ app.patch('/memories/:id', auth, async (req, res) => {
   res.json(result.rows[0]);
 });
 
+// Comments: shared with helper. parentType is 'plan' (checklist) or 'memory'.
+async function loadCoupleForParent(userId, parentType, parentId) {
+  const table = parentType === 'plan' ? 'checklist' : 'memories';
+  const row = await pool.query(
+    `SELECT t.*, c.user_a_id, c.user_b_id
+     FROM ${table} t
+     JOIN couples c ON c.id = t.couple_id
+     WHERE t.id = $1 AND (c.user_a_id = $2 OR c.user_b_id = $2) AND c.active = TRUE`,
+    [parentId, userId]
+  );
+  return row.rows[0];
+}
+
+app.get('/comments/:parentType/:id', auth, async (req, res) => {
+  const { parentType, id } = req.params;
+  if (!['plan', 'memory'].includes(parentType)) return res.status(400).json({ error: 'Invalid type' });
+  const parent = await loadCoupleForParent(req.user.id, parentType, id);
+  if (!parent) return res.status(404).json({ error: 'Not found' });
+
+  const list = await pool.query(
+    `SELECT c.id, c.text, c.user_id, c.created_at, u.name as user_name
+     FROM comments c JOIN users u ON u.id = c.user_id
+     WHERE c.parent_type = $1 AND c.parent_id = $2
+     ORDER BY c.created_at ASC`,
+    [parentType, id]
+  );
+
+  // Partner's last-seen timestamp (for read-receipt ✓✓ on my comments)
+  const isA = parent.user_a_id === req.user.id;
+  const partnerSeenAt = isA ? parent.last_comment_seen_b : parent.last_comment_seen_a;
+
+  // Mark this user as having seen comments for this item
+  const table = parentType === 'plan' ? 'checklist' : 'memories';
+  const col = isA ? 'last_comment_seen_a' : 'last_comment_seen_b';
+  await pool.query(`UPDATE ${table} SET ${col} = now() WHERE id = $1`, [id]);
+
+  res.json({ comments: list.rows, partner_last_seen_at: partnerSeenAt });
+});
+
+app.post('/comments/:parentType/:id', auth, async (req, res) => {
+  const { parentType, id } = req.params;
+  const text = (req.body.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'Empty' });
+  if (!['plan', 'memory'].includes(parentType)) return res.status(400).json({ error: 'Invalid type' });
+  const parent = await loadCoupleForParent(req.user.id, parentType, id);
+  if (!parent) return res.status(404).json({ error: 'Not found' });
+
+  const table = parentType === 'plan' ? 'checklist' : 'memories';
+  const col = parent.user_a_id === req.user.id ? 'last_comment_seen_a' : 'last_comment_seen_b';
+  const result = await pool.query(
+    `INSERT INTO comments (parent_type, parent_id, user_id, text) VALUES ($1, $2, $3, $4) RETURNING id, created_at`,
+    [parentType, id, req.user.id, text]
+  );
+  // Bump parent.updated_at so nav dot + list ordering refresh for partner.
+  // Caller marks themselves as having seen their own comment.
+  await pool.query(`UPDATE ${table} SET updated_at = now(), ${col} = now() WHERE id = $1`, [id]);
+
+  res.json({ id: result.rows[0].id, created_at: result.rows[0].created_at });
+});
+
 // Health check
 app.get('/health', async (req, res) => {
   try {
