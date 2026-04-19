@@ -27,6 +27,13 @@ export default function Swipe() {
   const activityRef = useRef(null);
   const queueRef = useRef([]);
   const titleScale = useRef(new Animated.Value(1)).current;
+  const revealOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!activity) return;
+    revealOpacity.setValue(0);
+    Animated.timing(revealOpacity, { toValue: 1, duration: 2500, useNativeDriver: true }).start();
+  }, [activity?.id]);
 
   useEffect(() => {
     activityRef.current = activity;
@@ -259,17 +266,24 @@ export default function Swipe() {
           { transform: [{ translateX: pan.x }, { translateY: pan.y }, { rotate }] },
         ]}
       >
-        {activity.image_url ? (
-          <Image key={activity.id} source={{ uri: resolveImage(activity.image_url) }} style={styles.cardImage} resizeMode="cover" />
-        ) : (
-          <View key={activity.id} style={styles.cardImage}>
-            <Text style={styles.categoryIcon}>{getCategoryIcon(activity.category_name)}</Text>
-          </View>
-        )}
+        <View style={styles.cardImage}>
+          {activity.image_url ? (
+            <Animated.Image
+              key={activity.id}
+              source={{ uri: resolveImage(activity.image_url) }}
+              style={[StyleSheet.absoluteFill, { opacity: revealOpacity }]}
+              resizeMode="cover"
+            />
+          ) : (
+            <Animated.Text key={activity.id} style={[styles.categoryIcon, { opacity: revealOpacity }]}>
+              {getCategoryIcon(activity.category_name)}
+            </Animated.Text>
+          )}
+        </View>
         <View style={styles.cardContent}>
           <Text style={styles.category}>{activity.category_name}</Text>
           <Text style={styles.cardTitle}>{activity.title}</Text>
-          <Text style={styles.cardTagline}>{activity.tagline}</Text>
+          <Animated.Text style={[styles.cardTagline, { opacity: revealOpacity }]}>{activity.tagline}</Animated.Text>
         </View>
 
         <Animated.View style={[styles.overlay, styles.likeOverlay, { opacity: likeOpacity }]}>
@@ -367,6 +381,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.warm,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   categoryIcon: {
     fontSize: 80,
