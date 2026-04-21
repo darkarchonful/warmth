@@ -1,8 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Keyboard, Platform, UIManager, LayoutAnimation } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../lib/colors';
 import { api } from '../lib/api';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export default function CommentThread({ parentType, parentId, meId }) {
   const insets = useSafeAreaInsets();
@@ -11,6 +15,25 @@ export default function CommentThread({ parentType, parentId, meId }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const listRef = useRef(null);
+  const [kbH, setKbH] = useState(0);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = (e) => {
+      // scheduleLayoutAnimation uses the keyboard event's exact duration and
+      // curve — the layout change rides the same native animation as the keyboard.
+      Keyboard.scheduleLayoutAnimation(e);
+      setKbH(e.endCoordinates?.height ?? 0);
+    };
+    const onHide = (e) => {
+      Keyboard.scheduleLayoutAnimation(e);
+      setKbH(0);
+    };
+    const s = Keyboard.addListener(showEvt, onShow);
+    const h = Keyboard.addListener(hideEvt, onHide);
+    return () => { s.remove(); h.remove(); };
+  }, []);
 
   useEffect(() => {
     load();
@@ -41,11 +64,7 @@ export default function CommentThread({ parentType, parentId, meId }) {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
-    >
+    <View style={{ flex: 1, paddingBottom: kbH }}>
       <FlatList
         ref={listRef}
         data={comments}
@@ -66,7 +85,7 @@ export default function CommentThread({ parentType, parentId, meId }) {
           );
         }}
       />
-      <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <View style={[styles.inputRow, { paddingBottom: kbH > 0 ? 6 : Math.max(insets.bottom, 12) }]}>
         <TextInput
           style={styles.input}
           value={text}
@@ -79,7 +98,7 @@ export default function CommentThread({ parentType, parentId, meId }) {
           <Text style={[styles.sendText, (!text.trim() || sending) && { opacity: 0.4 }]}>Send</Text>
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -115,6 +134,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     alignSelf: 'flex-end',
     marginTop: 2,
+    letterSpacing: -3,
   },
   empty: {
     fontSize: 14,

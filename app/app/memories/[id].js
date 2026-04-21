@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, API_URL } from '../../lib/api';
@@ -15,17 +15,44 @@ export default function MemoryDetail() {
   const { id } = useLocalSearchParams();
   const [item, setItem] = useState(null);
   const [meId, setMeId] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function reload() {
+    const list = await api.getMemories();
+    setItem(list.find(x => x.id.toString() === id));
+  }
 
   useEffect(() => {
     (async () => {
       try {
         const me = await api.me();
         setMeId(me.user.id);
-        const list = await api.getMemories();
-        setItem(list.find(x => x.id.toString() === id));
+        await reload();
       } catch {}
     })();
   }, [id]);
+
+  async function handleRequestRepeat() {
+    setBusy(true);
+    try { await api.requestRepeat(item.id); await reload(); } catch (e) { Alert.alert('Could not request', e.message); }
+    setBusy(false);
+  }
+
+  async function handleCancelRepeat() {
+    setBusy(true);
+    try { await api.cancelRepeat(item.id); await reload(); } catch {}
+    setBusy(false);
+  }
+
+  async function handleAcceptRepeat() {
+    setBusy(true);
+    try {
+      await api.acceptRepeat(item.id);
+      Alert.alert('Added to Plans', 'This one is back on your list.');
+      await reload();
+    } catch (e) { Alert.alert('Could not accept', e.message); }
+    setBusy(false);
+  }
 
   if (!item) {
     return (
@@ -63,6 +90,35 @@ export default function MemoryDetail() {
         </View>
       </View>
 
+      {item.repeat_requested_by_partner && (
+        <View style={styles.repeatBanner}>
+          <Text style={styles.repeatBannerText}>{partner} wants to do this again</Text>
+          <View style={styles.repeatBannerRow}>
+            <TouchableOpacity style={[styles.repeatBtn, styles.repeatAcceptBtn]} onPress={handleAcceptRepeat} disabled={busy}>
+              <Text style={styles.repeatAcceptText}>Yes, let's</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.repeatBtn, styles.repeatDeclineBtn]} onPress={handleCancelRepeat} disabled={busy}>
+              <Text style={styles.repeatDeclineText}>Not now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {item.repeat_requested_by_you && (
+        <View style={styles.repeatPending}>
+          <Text style={styles.repeatPendingText}>Waiting for {partner} to accept the repeat</Text>
+          <TouchableOpacity onPress={handleCancelRepeat} disabled={busy}>
+            <Text style={styles.repeatCancelLink}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {!item.repeat_requested_by_you && !item.repeat_requested_by_partner && (
+        <TouchableOpacity style={styles.repeatCta} onPress={handleRequestRepeat} disabled={busy}>
+          <Text style={styles.repeatCtaText}>Do this again</Text>
+        </TouchableOpacity>
+      )}
+
       <View style={styles.divider} />
 
       <View style={{ flex: 1 }}>
@@ -91,4 +147,42 @@ const styles = StyleSheet.create({
   stateLine: { fontSize: 13, color: colors.textLight, marginBottom: 8 },
   note: { fontSize: 14, color: colors.text, marginTop: 4 },
   divider: { height: 1, backgroundColor: colors.line || '#eee' },
+  repeatCta: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    paddingVertical: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    alignItems: 'center',
+  },
+  repeatCtaText: { color: colors.accent, fontSize: 14, fontWeight: '500' },
+  repeatBanner: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: colors.warm || '#fff5ee',
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  repeatBannerText: { fontSize: 14, color: colors.text, marginBottom: 10 },
+  repeatBannerRow: { flexDirection: 'row', gap: 8 },
+  repeatBtn: { flex: 1, paddingVertical: 10, borderRadius: 20, alignItems: 'center' },
+  repeatAcceptBtn: { backgroundColor: colors.accent },
+  repeatAcceptText: { color: '#fff', fontSize: 14, fontWeight: '500' },
+  repeatDeclineBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.textLight },
+  repeatDeclineText: { color: colors.textLight, fontSize: 14, fontWeight: '500' },
+  repeatPending: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  repeatPendingText: { fontSize: 13, color: colors.textLight, fontStyle: 'italic', flex: 1 },
+  repeatCancelLink: { color: colors.accent, fontSize: 13, fontWeight: '500', marginLeft: 8 },
 });

@@ -63,7 +63,7 @@ export default function Memories() {
       <TouchableOpacity
         onPress={() => router.push(`/memories/${item.id}`)}
         onLongPress={() => openEditor(item)}
-        style={[styles.item, item.is_new && styles.itemNew]}
+        style={[styles.item, (item.is_new || item.repeat_requested_by_partner) && styles.itemNew]}
       >
         <Text style={styles.date}>{formatDate(item.completed_at)}</Text>
         <Text style={styles.itemTitle}>{item.title}</Text>
@@ -71,6 +71,12 @@ export default function Memories() {
         <Text style={styles.category}>{item.category_name}</Text>
         {row('You', item.you_rating, item.you_mood, item.you_note)}
         {row(partner, item.partner_rating, item.partner_mood, item.partner_note)}
+        {item.repeat_requested_by_partner && (
+          <Text style={styles.repeatFlag}>↻ {partner} wants to do this again</Text>
+        )}
+        {item.repeat_requested_by_you && (
+          <Text style={styles.repeatPending}>↻ Waiting for {partner}</Text>
+        )}
       </TouchableOpacity>
     );
   }
@@ -182,6 +188,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   itemNew: { borderColor: colors.accent },
+  repeatFlag: { marginTop: 10, fontSize: 13, color: colors.accent, fontWeight: '500' },
+  repeatPending: { marginTop: 10, fontSize: 13, color: colors.textMuted, fontStyle: 'italic' },
   date: { fontSize: 12, color: colors.accent, marginBottom: 6 },
   itemTitle: { fontSize: 18, color: colors.text, marginBottom: 4 },
   itemTagline: { fontSize: 14, color: colors.textLight, marginBottom: 8 },

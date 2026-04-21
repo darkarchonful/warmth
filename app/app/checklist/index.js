@@ -1,11 +1,8 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Dimensions } from 'react-native';
-import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api } from '../../lib/api';
-
-const SCREEN_W = Dimensions.get('window').width;
 
 export default function Checklist() {
   const router = useRouter();
@@ -36,11 +33,6 @@ export default function Checklist() {
     load();
   }
 
-  async function handleDelete(id) {
-    setItems(prev => prev.filter(it => it.id !== id));
-    try { await api.deleteChecklist(id); } catch { load(); }
-  }
-
   function renderItem({ item }) {
     const partner = item.partner_name || 'Partner';
 
@@ -56,7 +48,7 @@ export default function Checklist() {
       </Text>
     );
 
-    const card = (
+    return (
       <TouchableOpacity
         activeOpacity={0.85}
         onPress={() => router.push(`/checklist/${item.id}`)}
@@ -65,7 +57,7 @@ export default function Checklist() {
         <View style={styles.itemHeader}>
           <Text style={styles.itemCategory}>{item.category_name}</Text>
           <Text style={[styles.status, styles[`status_${item.status}`]]}>
-            {item.status === 'matched' ? 'Confirm' : item.status === 'approved' ? 'Planned' : 'Done'}
+            {item.status === 'matched' ? 'Confirm' : 'Planned'}
           </Text>
         </View>
         <Text style={styles.itemTitle}>{item.title}</Text>
@@ -99,22 +91,6 @@ export default function Checklist() {
           </>
         )}
       </TouchableOpacity>
-    );
-
-    if (item.status !== 'done') return card;
-
-    return (
-      <Swipeable
-        renderRightActions={() => (
-          <TouchableOpacity style={styles.deleteAction} onPress={() => handleDelete(item.id)}>
-            <Text style={styles.deleteActionText}>Delete</Text>
-          </TouchableOpacity>
-        )}
-        rightThreshold={SCREEN_W * 0.4}
-        onSwipeableOpen={(direction) => { if (direction === 'right') handleDelete(item.id); }}
-      >
-        {card}
-      </Swipeable>
     );
   }
 
@@ -189,19 +165,6 @@ const styles = StyleSheet.create({
   itemNew: {
     borderColor: colors.accent,
   },
-  deleteAction: {
-    backgroundColor: '#e74c3c',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 90,
-    marginBottom: 12,
-    borderRadius: 16,
-  },
-  deleteActionText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -219,7 +182,6 @@ const styles = StyleSheet.create({
   },
   status_matched: { color: colors.accent },
   status_approved: { color: colors.success },
-  status_done: { color: colors.textMuted },
   itemTitle: {
     fontSize: 18,
     color: colors.text,

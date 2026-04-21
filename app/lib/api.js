@@ -74,6 +74,9 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify(patch),
   }),
+  requestRepeat: (id) => request(`/memories/${id}/repeat`, { method: 'POST' }),
+  cancelRepeat: (id) => request(`/memories/${id}/cancel-repeat`, { method: 'POST' }),
+  acceptRepeat: (id) => request(`/memories/${id}/accept-repeat`, { method: 'POST' }),
 
   // Comments
   getComments: (parentType, id) => request(`/comments/${parentType}/${id}`),

@@ -9,6 +9,26 @@ function resolveImage(url) {
   return url.startsWith('http') ? url : `${API_URL}${url}`;
 }
 
+function PulsingDot() {
+  const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.parallel([
+        Animated.timing(scale, { toValue: 1.5, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.55, duration: 700, useNativeDriver: true }),
+      ]),
+      Animated.parallel([
+        Animated.timing(scale, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ]),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [scale, opacity]);
+  return <Animated.View style={[styles.unreadDot, { transform: [{ scale }], opacity }]} />;
+}
+
 const { width: SCREEN_W } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_W * 0.25;
 
@@ -178,42 +198,50 @@ export default function Swipe() {
   if (blocked) {
     const isComeBack = previewImages.length > 0;
     return (
-      <View style={styles.container}>
-        {isComeBack && (
-          <View style={styles.previewRow}>
-            {previewImages.map((url, i) => (
-              <AnimatedPreviewCard key={i} url={resolveImage(url)} index={i} />
-            ))}
-          </View>
-        )}
-        <Text style={styles.blockedEmoji}>{isComeBack ? '🌙' : '✨'}</Text>
-        <Text style={styles.blockedTitle}>{isComeBack ? 'That\'s enough for today' : 'Time to act'}</Text>
-        <Text style={styles.blockedText}>{blockMessage}</Text>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => router.push('/checklist')}
-        >
-          <Text style={styles.buttonText}>View plans</Text>
-        </TouchableOpacity>
+      <View style={styles.matchContainer}>
+        <View style={styles.matchCenter}>
+          {isComeBack && (
+            <View style={styles.previewRow}>
+              {previewImages.map((url, i) => (
+                <AnimatedPreviewCard key={i} url={resolveImage(url)} index={i} />
+              ))}
+            </View>
+          )}
+          <Text style={styles.matchEmoji}>{isComeBack ? '🌙' : '✨'}</Text>
+          <Text style={styles.matchTitle}>{isComeBack ? 'That\'s enough for today' : 'Time to act'}</Text>
+          <Text style={styles.matchFooter}>{blockMessage}</Text>
+          <TouchableOpacity
+            style={[styles.button, { marginTop: 24 }]}
+            onPress={() => router.push('/checklist')}
+          >
+            <Text style={styles.buttonText}>View plans</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
   if (done) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.blockedTitle}>You've seen everything</Text>
-        <Text style={styles.blockedText}>New ideas coming soon</Text>
+      <View style={styles.matchContainer}>
+        <View style={styles.matchCenter}>
+          <Text style={styles.matchEmoji}>✨</Text>
+          <Text style={styles.matchTitle}>You've seen everything</Text>
+          <Text style={styles.matchFooter}>New ideas coming soon</Text>
+        </View>
       </View>
     );
   }
 
   if (matchPopup) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.matchEmoji}>💛</Text>
-        <Text style={styles.matchTitle}>You both want this!</Text>
-        <Text style={styles.matchActivity}>{matchPopup}</Text>
+      <View style={styles.matchContainer}>
+        <View style={styles.matchCenter}>
+          <Text style={styles.matchEmoji}>💛</Text>
+          <Text style={styles.matchTitle}>You both want this!</Text>
+          <Text style={styles.matchActivity}>{matchPopup}</Text>
+          <Text style={styles.matchFooter}>It's now in your Plans</Text>
+        </View>
       </View>
     );
   }
@@ -232,7 +260,7 @@ export default function Swipe() {
         <TouchableOpacity style={styles.navSide} onPress={() => router.push('/checklist')}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={[styles.navItem, { textAlign: 'left' }]}>Plans</Text>
-            {unread > 0 && <View style={styles.unreadDot} />}
+            {unread > 0 && <PulsingDot />}
           </View>
         </TouchableOpacity>
         <TouchableOpacity
@@ -265,7 +293,7 @@ export default function Swipe() {
         <TouchableOpacity style={styles.navSide} onPress={() => router.push('/memories')}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
             <Text style={[styles.navItem, { textAlign: 'right' }]}>Memories</Text>
-            {unreadMem > 0 && <View style={styles.unreadDot} />}
+            {unreadMem > 0 && <PulsingDot />}
           </View>
         </TouchableOpacity>
       </View>
@@ -555,19 +583,40 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
+  matchContainer: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    paddingHorizontal: 24,
+    paddingBottom: 60,
+  },
+  matchCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   matchEmoji: {
     fontSize: 80,
-    marginBottom: 20,
+    marginBottom: 24,
+    textAlign: 'center',
   },
   matchTitle: {
     fontSize: 26,
     color: colors.text,
     fontWeight: '300',
-    marginBottom: 10,
+    marginBottom: 12,
+    textAlign: 'center',
   },
   matchActivity: {
-    fontSize: 18,
+    fontSize: 20,
     color: colors.accent,
     fontWeight: '500',
+    textAlign: 'center',
+  },
+  matchFooter: {
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginTop: 16,
   },
 });

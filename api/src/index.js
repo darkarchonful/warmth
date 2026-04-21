@@ -181,6 +181,28 @@ app.post('/couple/join', auth, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Cannot pair with yourself' });
     }
+    // Cooldown after a break-up: same two people can't re-pair for 48h.
+    // Pairing with someone new is unaffected.
+    const prior = await client.query(
+      `SELECT ended_at FROM couples
+       WHERE user_b_id IS NOT NULL
+         AND ((user_a_id = $1 AND user_b_id = $2) OR (user_a_id = $2 AND user_b_id = $1))
+         AND ended_at IS NOT NULL
+       ORDER BY ended_at DESC LIMIT 1`,
+      [couple.rows[0].user_a_id, req.user.id]
+    );
+    if (prior.rows.length > 0) {
+      const endedAt = new Date(prior.rows[0].ended_at);
+      const hoursSince = (Date.now() - endedAt.getTime()) / 3600000;
+      if (hoursSince < 48) {
+        await client.query('ROLLBACK');
+        const hoursLeft = Math.ceil(48 - hoursSince);
+        const when = hoursLeft >= 24
+          ? `in about ${Math.ceil(hoursLeft / 24)} day${hoursLeft >= 48 ? 's' : ''}`
+          : `in ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}`;
+        return res.status(400).json({ error: `Give it a moment — you two can reconnect ${when}` });
+      }
+    }
     await client.query(
       `UPDATE couples SET active = FALSE
        WHERE user_a_id = $1 AND active = TRUE AND user_b_id IS NULL AND id <> $2`,
@@ -263,11 +285,12 @@ app.get('/activities/next', auth, async (req, res) => {
 
   // Daily ration with spread days and completion bonus.
   // Spread-day heuristic: ~1/3 of days, fewer cards early, full cap by evening.
+  const disableLimit = process.env.DISABLE_SWIPE_LIMIT === '1';
   const BASE_CAP = parseInt(process.env.DAILY_SWIPE_LIMIT || '8', 10);
   const today = new Date();
   const dateKey = today.toISOString().slice(0, 10);
   const hash = (req.user.id * 31 + parseInt(dateKey.replace(/-/g, ''), 10)) % 3;
-  const spreadDay = hash === 0;
+  const spreadDay = hash === 0 && !disableLimit;
   const hour = today.getHours();
   let cap = BASE_CAP;
   if (spreadDay) {
@@ -285,7 +308,7 @@ app.get('/activities/next', auth, async (req, res) => {
     "SELECT COUNT(*)::int AS n FROM swipes WHERE user_id = $1 AND swiped_at::date = CURRENT_DATE",
     [req.user.id]
   );
-  if (swipedToday.rows[0].n >= cap) {
+  if (!disableLimit && swipedToday.rows[0].n >= cap) {
     const preview = await pool.query(
       `SELECT image_url FROM activities
        WHERE image_url IS NOT NULL AND id NOT IN (
@@ -398,10 +421,8 @@ app.get('/checklist', auth, async (req, res) => {
      FROM checklist cl
      JOIN activities a ON a.id = cl.activity_id
      JOIN categories c ON c.id = a.category_id
-     WHERE cl.couple_id = $1
-     ORDER BY
-       CASE cl.status WHEN 'done' THEN 1 ELSE 0 END,
-       cl.updated_at DESC`,
+     WHERE cl.couple_id = $1 AND cl.status <> 'done'
+     ORDER BY cl.updated_at DESC`,
     [coupleId]
   );
   const lastSeen = await pool.query(
@@ -482,8 +503,8 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
     // Create memory with denormalized activity info so it survives
     // checklist cleanup as a permanent scrapbook entry.
     await pool.query(
-      `INSERT INTO memories (couple_id, checklist_id, activity_title, activity_tagline, activity_image_url, activity_category)
-       SELECT $1, $2, a.title, a.tagline, a.image_url, cat.name
+      `INSERT INTO memories (couple_id, checklist_id, activity_id, activity_title, activity_tagline, activity_image_url, activity_category)
+       SELECT $1, $2, a.id, a.title, a.tagline, a.image_url, cat.name
        FROM activities a
        JOIN categories cat ON cat.id = a.category_id
        JOIN checklist cl ON cl.activity_id = a.id
@@ -537,7 +558,8 @@ app.get('/memories', auth, async (req, res) => {
     `SELECT id, couple_id, checklist_id, photo_url, completed_at, updated_at,
             activity_title AS title, activity_tagline AS tagline,
             activity_image_url AS image_url, activity_category AS category_name,
-            rating_a, rating_b, mood_a, mood_b, note_a, note_b
+            rating_a, rating_b, mood_a, mood_b, note_a, note_b,
+            repeat_requested_by, repeat_requested_at
      FROM memories
      WHERE couple_id = $1
      ORDER BY completed_at DESC`,
@@ -558,6 +580,9 @@ app.get('/memories', auth, async (req, res) => {
     partner_note: isA ? r.note_b : r.note_a,
     partner_name,
     is_new: !seenAt || new Date(r.updated_at) > new Date(seenAt),
+    repeat_requested_by_you: r.repeat_requested_by === req.user.id,
+    repeat_requested_by_partner: r.repeat_requested_by != null && r.repeat_requested_by !== req.user.id,
+    repeat_requested_at: r.repeat_requested_at,
   }));
   await pool.query('UPDATE users SET last_memories_viewed_at = NOW() WHERE id = $1', [req.user.id]);
   res.json(payload);
@@ -593,6 +618,89 @@ app.patch('/memories/:id', auth, async (req, res) => {
   );
   if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
   res.json(result.rows[0]);
+});
+
+// One partner asks to do this activity again. Stored on the memory; partner
+// accepts from their memory view to spawn a fresh checklist item.
+app.post('/memories/:id/repeat', auth, async (req, res) => {
+  const couple = await pool.query(
+    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    [req.user.id]
+  );
+  if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
+  const result = await pool.query(
+    `UPDATE memories
+     SET repeat_requested_by = $1, repeat_requested_at = NOW(), updated_at = NOW()
+     WHERE id = $2 AND couple_id = $3 AND repeat_requested_by IS NULL
+     RETURNING *`,
+    [req.user.id, req.params.id, couple.rows[0].id]
+  );
+  if (result.rows.length === 0) return res.status(409).json({ error: 'Already requested or not found' });
+  res.json({ ok: true });
+});
+
+// Requester can withdraw, or partner can decline.
+app.post('/memories/:id/cancel-repeat', auth, async (req, res) => {
+  const couple = await pool.query(
+    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    [req.user.id]
+  );
+  if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
+  await pool.query(
+    `UPDATE memories
+     SET repeat_requested_by = NULL, repeat_requested_at = NULL, updated_at = NOW()
+     WHERE id = $1 AND couple_id = $2`,
+    [req.params.id, couple.rows[0].id]
+  );
+  res.json({ ok: true });
+});
+
+// Partner accepts: clears the request and creates a fresh checklist item in
+// 'approved' state (both sides already agreed to repeat this one).
+app.post('/memories/:id/accept-repeat', auth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const memory = await client.query(
+      `SELECT m.id, m.couple_id, m.repeat_requested_by, m.activity_id
+       FROM memories m
+       JOIN couples c ON c.id = m.couple_id
+       WHERE m.id = $1 AND (c.user_a_id = $2 OR c.user_b_id = $2) AND c.active = TRUE`,
+      [req.params.id, req.user.id]
+    );
+    if (memory.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const m = memory.rows[0];
+    if (!m.repeat_requested_by || m.repeat_requested_by === req.user.id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'No pending request to accept' });
+    }
+    if (!m.activity_id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Original activity unavailable' });
+    }
+
+    const plan = await client.query(
+      `INSERT INTO checklist (couple_id, activity_id, approved_by_a, approved_by_b, approved_at, status)
+       VALUES ($1, $2, TRUE, TRUE, NOW(), 'approved')
+       RETURNING id`,
+      [m.couple_id, m.activity_id]
+    );
+    await client.query(
+      `UPDATE memories SET repeat_requested_by = NULL, repeat_requested_at = NULL, updated_at = NOW() WHERE id = $1`,
+      [m.id]
+    );
+    await client.query('COMMIT');
+    res.json({ ok: true, checklist_id: plan.rows[0].id });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('accept-repeat', e);
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
+  }
 });
 
 // Comments: shared with helper. parentType is 'plan' (checklist) or 'memory'.
