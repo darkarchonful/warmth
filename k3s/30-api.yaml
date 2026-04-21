@@ -39,6 +39,9 @@ spec:
               value: "3000"
             - name: APP_VERSION
               value: "v7"
+            # TODO: remove before public launch — testing bypass for daily cap
+            - name: DISABLE_SWIPE_LIMIT
+              value: "1"
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
