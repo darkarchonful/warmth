@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, PanResponder, Image, Alert } from 'react-native';
+import { PinchGestureHandler, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../lib/colors';
 import { api, API_URL, clearToken } from '../lib/api';
@@ -163,10 +164,40 @@ export default function Swipe() {
     });
   }
 
+  const pinchScale = useRef(new Animated.Value(1)).current;
+  const zoomTx = useRef(new Animated.Value(0)).current;
+  const zoomTy = useRef(new Animated.Value(0)).current;
+  const [zooming, setZooming] = useState(false);
+  const pinchRef = useRef();
+  const zoomPanRef = useRef();
+
+  const onPinchEvent = Animated.event([{ nativeEvent: { scale: pinchScale } }], { useNativeDriver: true });
+  const onZoomPanEvent = Animated.event(
+    [{ nativeEvent: { translationX: zoomTx, translationY: zoomTy } }],
+    { useNativeDriver: true },
+  );
+
+  const resetZoom = () => {
+    Animated.parallel([
+      Animated.spring(pinchScale, { toValue: 1, useNativeDriver: true, friction: 5 }),
+      Animated.spring(zoomTx, { toValue: 0, useNativeDriver: true, friction: 5 }),
+      Animated.spring(zoomTy, { toValue: 0, useNativeDriver: true, friction: 5 }),
+    ]).start(() => setZooming(false));
+  };
+
+  const onPinchStateChange = (event) => {
+    if (event.nativeEvent.state === State.ACTIVE) setZooming(true);
+    if (event.nativeEvent.oldState === State.ACTIVE) resetZoom();
+  };
+  const onZoomPanStateChange = (event) => {
+    if (event.nativeEvent.oldState === State.ACTIVE) resetZoom();
+  };
+
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 5,
+      onStartShouldSetPanResponder: (e) => e.nativeEvent.touches.length < 2,
+      onMoveShouldSetPanResponder: (e, g) => e.nativeEvent.touches.length < 2 && Math.abs(g.dx) > 5,
+      onPanResponderTerminationRequest: () => true,
       onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
       onPanResponderRelease: (_, g) => {
         if (g.dx > SWIPE_THRESHOLD) {
@@ -305,20 +336,45 @@ export default function Swipe() {
           { transform: [{ translateX: pan.x }, { translateY: pan.y }, { rotate }] },
         ]}
       >
-        <View style={styles.cardImage}>
-          {activity.image_url ? (
-            <Animated.Image
-              key={activity.id}
-              source={{ uri: resolveImage(activity.image_url) }}
-              style={[StyleSheet.absoluteFill, { opacity: revealOpacity }]}
-              resizeMode="cover"
-            />
-          ) : (
-            <Animated.Text key={activity.id} style={[styles.categoryIcon, { opacity: revealOpacity }]}>
-              {getCategoryIcon(activity.category_name)}
-            </Animated.Text>
-          )}
-        </View>
+        <PinchGestureHandler
+          ref={pinchRef}
+          simultaneousHandlers={zoomPanRef}
+          onGestureEvent={onPinchEvent}
+          onHandlerStateChange={onPinchStateChange}
+        >
+          <Animated.View style={[styles.cardImage, zooming && { zIndex: 100, elevation: 20, overflow: 'visible' }]}>
+            <PanGestureHandler
+              ref={zoomPanRef}
+              simultaneousHandlers={pinchRef}
+              minPointers={2}
+              onGestureEvent={onZoomPanEvent}
+              onHandlerStateChange={onZoomPanStateChange}
+            >
+              {activity.image_url ? (
+                <Animated.Image
+                  key={activity.id}
+                  source={{ uri: resolveImage(activity.image_url) }}
+                  style={[
+                    StyleSheet.absoluteFill,
+                    {
+                      opacity: revealOpacity,
+                      transform: [
+                        { translateX: zoomTx },
+                        { translateY: zoomTy },
+                        { scale: pinchScale },
+                      ],
+                    },
+                  ]}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Animated.Text key={activity.id} style={[styles.categoryIcon, { opacity: revealOpacity }]}>
+                  {getCategoryIcon(activity.category_name)}
+                </Animated.Text>
+              )}
+            </PanGestureHandler>
+          </Animated.View>
+        </PinchGestureHandler>
         <View style={styles.cardContent}>
           <Text style={styles.category}>{activity.category_name}</Text>
           <Text style={styles.cardTitle}>{activity.title}</Text>
@@ -442,7 +498,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: 24,
     width: '100%',
-    overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 20,
@@ -455,6 +510,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.warm,
     alignItems: 'center',
     justifyContent: 'center',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     overflow: 'hidden',
   },
   categoryIcon: {
