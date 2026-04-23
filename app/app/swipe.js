@@ -299,16 +299,17 @@ export default function Swipe() {
           </View>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.navSide}
+          style={styles.navCenter}
+          activeOpacity={0.7}
           onPressIn={() => {
-            Animated.timing(titleScale, { toValue: 1.1, duration: 150, useNativeDriver: true }).start();
+            Animated.timing(titleScale, { toValue: 0.96, duration: 120, useNativeDriver: true }).start();
           }}
           onPressOut={() => {
-            Animated.timing(titleScale, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+            Animated.spring(titleScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
           }}
           onPress={() => setMenuOpen(true)}
         >
-          <Animated.View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', transform: [{ scale: titleScale }] }}>
+          <Animated.View style={[styles.navPill, { transform: [{ scale: titleScale }] }]}>
             <Text style={styles.navTitle}>Warmth{backendVersion ? ` · ${backendVersion}` : ''}</Text>
             <Text style={styles.navTitleCaret}>⌄</Text>
           </Animated.View>
@@ -482,16 +483,37 @@ const styles = StyleSheet.create({
   navSide: {
     flex: 1,
   },
+  navCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+    borderRadius: 20,
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   navTitle: {
-    fontSize: 14,
-    color: colors.text,
+    fontSize: 13,
+    color: '#fff',
     fontWeight: '500',
+    letterSpacing: 0.3,
   },
   navTitleCaret: {
-    fontSize: 14,
-    color: colors.textLight,
-    marginLeft: 4,
-    marginTop: -3,
+    fontSize: 12,
+    color: '#fff',
+    marginLeft: 6,
+    marginTop: -2,
+    fontWeight: '600',
   },
   navItem: {
     fontSize: 14,
