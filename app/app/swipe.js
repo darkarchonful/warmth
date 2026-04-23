@@ -4,6 +4,7 @@ import { PinchGestureHandler, PanGestureHandler, State } from 'react-native-gest
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../lib/colors';
 import { api, API_URL, clearToken } from '../lib/api';
+import Menu from '../components/Menu';
 
 function resolveImage(url) {
   if (!url) return null;
@@ -44,6 +45,8 @@ export default function Swipe() {
   const [backendVersion, setBackendVersion] = useState('');
   const [unread, setUnread] = useState(0);
   const [unreadMem, setUnreadMem] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [partnerName, setPartnerName] = useState('');
 
   const pan = useRef(new Animated.ValueXY()).current;
   const activityRef = useRef(null);
@@ -76,6 +79,7 @@ export default function Swipe() {
     const tick = () => api.me().then(d => {
       setUnread(d.unreadCount || 0);
       setUnreadMem(d.unreadMemories || 0);
+      setPartnerName(d.couple?.partner_name || '');
     }).catch(() => {});
     tick();
     const id = setInterval(tick, 5000);
@@ -296,30 +300,18 @@ export default function Swipe() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navSide}
-          delayLongPress={600}
           onPressIn={() => {
-            Animated.timing(titleScale, { toValue: 1.2, duration: 600, useNativeDriver: true }).start();
+            Animated.timing(titleScale, { toValue: 1.1, duration: 150, useNativeDriver: true }).start();
           }}
           onPressOut={() => {
-            Animated.timing(titleScale, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+            Animated.timing(titleScale, { toValue: 1, duration: 200, useNativeDriver: true }).start();
           }}
-          onLongPress={() => {
-          Alert.alert('Warmth', '', [
-            { text: 'Unpair', style: 'destructive', onPress: () => {
-              Alert.alert('Unpair?', 'This will end the pairing and delete your swipes and shared plans. Your partner will see the app as unpaired.', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Unpair', style: 'destructive', onPress: async () => {
-                  try { await api.unpair(); router.replace('/'); } catch (e) { Alert.alert('Error', e.message); }
-                } },
-              ]);
-            } },
-            { text: 'Log out', onPress: async () => { await clearToken(); router.replace('/'); } },
-            { text: 'Cancel', style: 'cancel' },
-          ]);
-        }}>
-          <Animated.Text style={[styles.navTitle, {
-            transform: [{ scale: titleScale }],
-          }]}>Warmth {backendVersion ? `· ${backendVersion}` : ''}</Animated.Text>
+          onPress={() => setMenuOpen(true)}
+        >
+          <Animated.View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', transform: [{ scale: titleScale }] }}>
+            <Text style={styles.navTitle}>Warmth{backendVersion ? ` · ${backendVersion}` : ''}</Text>
+            <Text style={styles.navTitleCaret}>⌄</Text>
+          </Animated.View>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navSide} onPress={() => router.push('/memories')}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
@@ -403,6 +395,21 @@ export default function Swipe() {
           <Text style={styles.loveText}>Love this</Text>
         </TouchableOpacity>
       </View>
+
+      <Menu
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        partnerName={partnerName}
+        onUnpair={async () => {
+          setMenuOpen(false);
+          try { await api.unpair(); router.replace('/'); } catch (e) { Alert.alert('Error', e.message); }
+        }}
+        onLogout={async () => {
+          setMenuOpen(false);
+          await clearToken();
+          router.replace('/');
+        }}
+      />
     </View>
   );
 }
@@ -476,11 +483,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   navTitle: {
-    flex: 1,
-    fontSize: 18,
+    fontSize: 14,
     color: colors.text,
-    fontWeight: '300',
-    textAlign: 'center',
+    fontWeight: '500',
+  },
+  navTitleCaret: {
+    fontSize: 14,
+    color: colors.textLight,
+    marginLeft: 4,
+    marginTop: -3,
   },
   navItem: {
     fontSize: 14,
