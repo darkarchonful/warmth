@@ -24,7 +24,7 @@ spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: DoNotSchedule
+          whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
               app: warmth-api
@@ -32,13 +32,13 @@ spec:
         - name: ghcr-pull
       containers:
         - name: api
-          image: ghcr.io/darkarchonful/warmth-api:v7
+          image: ghcr.io/darkarchonful/warmth-api:v8
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
             - name: APP_VERSION
-              value: "v7"
+              value: "v8"
             # TODO: remove before public launch — testing bypass for daily cap
             - name: DISABLE_SWIPE_LIMIT
               value: "1"
