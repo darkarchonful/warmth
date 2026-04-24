@@ -214,6 +214,17 @@ app.post('/couple/join', auth, async (req, res) => {
       [req.user.id, couple.rows[0].id]
     );
     await client.query('COMMIT');
+    // Notify the inviter — they've been sitting on the share-code screen.
+    const inviterId = couple.rows[0].user_a_id;
+    pool.query('SELECT name FROM users WHERE id = $1', [req.user.id])
+      .then(({ rows }) => {
+        if (rows[0]) {
+          sendPush(pool, inviterId, 'Paired!',
+            `${rows[0].name} joined you`,
+            { route: '/swipe' }
+          ).catch(e => console.error('[push] invite', e.message));
+        }
+      }).catch(e => console.error('[push] invite lookup', e.message));
     res.json(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -230,7 +241,7 @@ app.post('/couple/unpair', auth, async (req, res) => {
   try {
     await client.query('BEGIN');
     const couple = await client.query(
-      `SELECT id FROM couples
+      `SELECT id, user_a_id, user_b_id FROM couples
        WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE
        FOR UPDATE`,
       [req.user.id]
@@ -240,6 +251,9 @@ app.post('/couple/unpair', auth, async (req, res) => {
       return res.status(404).json({ error: 'No active couple' });
     }
     const coupleId = couple.rows[0].id;
+    const partnerId = couple.rows[0].user_a_id === req.user.id
+      ? couple.rows[0].user_b_id
+      : couple.rows[0].user_a_id;
     await client.query('DELETE FROM memories WHERE couple_id = $1', [coupleId]);
     await client.query('DELETE FROM checklist WHERE couple_id = $1', [coupleId]);
     await client.query('DELETE FROM swipes WHERE couple_id = $1', [coupleId]);
@@ -248,6 +262,17 @@ app.post('/couple/unpair', auth, async (req, res) => {
       [req.user.id, coupleId]
     );
     await client.query('COMMIT');
+    // Notify partner after commit — only if there was one (pre-pairing invites have no partner_id).
+    if (partnerId) {
+      pool.query('SELECT name FROM users WHERE id = $1', [req.user.id])
+        .then(({ rows }) => {
+          if (!rows[0]) return;
+          sendPush(pool, partnerId, 'Pairing ended',
+            `${rows[0].name} ended the pairing`,
+            { route: '/' }
+          ).catch(e => console.error('[push] unpair', e.message));
+        }).catch(e => console.error('[push] unpair lookup', e.message));
+    }
     res.json({ message: 'Unpaired' });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -394,6 +419,19 @@ app.post('/activities/:id/swipe', auth, async (req, res) => {
         'INSERT INTO checklist (couple_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
         [c.id, activityId]
       );
+      // Notify partner — acting user sees the match modal in-app.
+      pool.query(
+        `SELECT u.name as me_name, a.title as activity_title
+         FROM users u, activities a WHERE u.id = $1 AND a.id = $2`,
+        [req.user.id, activityId]
+      ).then(({ rows }) => {
+        if (rows[0]) {
+          sendPush(pool, partnerId, 'You matched!',
+            `${rows[0].me_name} also picked ${rows[0].activity_title}`,
+            { route: '/checklist' }
+          ).catch(e => console.error('[push] match', e.message));
+        }
+      }).catch(e => console.error('[push] match lookup', e.message));
       return res.json({ match: true, message: 'You both want this!' });
     }
   }
@@ -468,12 +506,29 @@ app.post('/checklist/:id/approve', auth, async (req, res) => {
   );
 
   const item = await pool.query('SELECT * FROM checklist WHERE id = $1', [req.params.id]);
-  if (item.rows[0].approved_by_a && item.rows[0].approved_by_b) {
+  const bothApproved = item.rows[0].approved_by_a && item.rows[0].approved_by_b;
+  if (bothApproved) {
     await pool.query(
       "UPDATE checklist SET status = 'approved', approved_at = NOW(), updated_at = NOW() WHERE id = $1",
       [req.params.id]
     );
   }
+  // Notify partner — context-aware copy.
+  const partnerId = isA ? c.user_b_id : c.user_a_id;
+  pool.query(
+    `SELECT u.name as me_name, a.title as activity_title
+     FROM users u, checklist cl JOIN activities a ON a.id = cl.activity_id
+     WHERE u.id = $1 AND cl.id = $2`,
+    [req.user.id, req.params.id]
+  ).then(({ rows }) => {
+    if (!rows[0]) return;
+    const title = bothApproved ? 'Plan set!' : 'Approval needed';
+    const body = bothApproved
+      ? `${rows[0].me_name} confirmed — ${rows[0].activity_title} is on`
+      : `${rows[0].me_name} wants to do ${rows[0].activity_title}`;
+    sendPush(pool, partnerId, title, body, { route: '/checklist' })
+      .catch(e => console.error('[push] approve', e.message));
+  }).catch(e => console.error('[push] approve lookup', e.message));
 
   res.json({ approved: true });
 });
@@ -496,7 +551,8 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
   );
 
   const item = await pool.query('SELECT * FROM checklist WHERE id = $1', [req.params.id]);
-  if (item.rows[0].completed_by_a && item.rows[0].completed_by_b) {
+  const bothDone = item.rows[0].completed_by_a && item.rows[0].completed_by_b;
+  if (bothDone) {
     await pool.query(
       "UPDATE checklist SET status = 'done', completed_at = NOW(), updated_at = NOW() WHERE id = $1",
       [req.params.id]
@@ -513,6 +569,23 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
       [c.id, req.params.id]
     );
   }
+  // Notify partner.
+  const partnerId = isA ? c.user_b_id : c.user_a_id;
+  pool.query(
+    `SELECT u.name as me_name, a.title as activity_title
+     FROM users u, checklist cl JOIN activities a ON a.id = cl.activity_id
+     WHERE u.id = $1 AND cl.id = $2`,
+    [req.user.id, req.params.id]
+  ).then(({ rows }) => {
+    if (!rows[0]) return;
+    const title = bothDone ? 'Memory added' : 'Did you do it too?';
+    const body = bothDone
+      ? `You two did ${rows[0].activity_title}`
+      : `${rows[0].me_name} marked ${rows[0].activity_title} done`;
+    const route = bothDone ? '/memories' : '/checklist';
+    sendPush(pool, partnerId, title, body, { route })
+      .catch(e => console.error('[push] complete', e.message));
+  }).catch(e => console.error('[push] complete lookup', e.message));
 
   res.json({ completed: true });
 });
@@ -625,18 +698,29 @@ app.patch('/memories/:id', auth, async (req, res) => {
 // accepts from their memory view to spawn a fresh checklist item.
 app.post('/memories/:id/repeat', auth, async (req, res) => {
   const couple = await pool.query(
-    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    'SELECT id, user_a_id, user_b_id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
     [req.user.id]
   );
   if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
+  const c = couple.rows[0];
   const result = await pool.query(
     `UPDATE memories
      SET repeat_requested_by = $1, repeat_requested_at = NOW(), updated_at = NOW()
      WHERE id = $2 AND couple_id = $3 AND repeat_requested_by IS NULL
      RETURNING *`,
-    [req.user.id, req.params.id, couple.rows[0].id]
+    [req.user.id, req.params.id, c.id]
   );
   if (result.rows.length === 0) return res.status(409).json({ error: 'Already requested or not found' });
+  // Notify partner.
+  const partnerId = c.user_a_id === req.user.id ? c.user_b_id : c.user_a_id;
+  pool.query('SELECT name FROM users WHERE id = $1', [req.user.id])
+    .then(({ rows }) => {
+      if (!rows[0]) return;
+      sendPush(pool, partnerId, 'Do it again?',
+        `${rows[0].name} wants to repeat ${result.rows[0].activity_title}`,
+        { route: `/memories/${req.params.id}` }
+      ).catch(e => console.error('[push] repeat', e.message));
+    }).catch(e => console.error('[push] repeat lookup', e.message));
   res.json({ ok: true });
 });
 
@@ -760,6 +844,19 @@ app.post('/comments/:parentType/:id', auth, async (req, res) => {
   // Bump parent.updated_at so nav dot + list ordering refresh for partner.
   // Caller marks themselves as having seen their own comment.
   await pool.query(`UPDATE ${table} SET updated_at = now(), ${col} = now() WHERE id = $1`, [id]);
+
+  // Notify partner — truncate long comments for the push body.
+  const partnerId = parent.user_a_id === req.user.id ? parent.user_b_id : parent.user_a_id;
+  if (partnerId) {
+    pool.query('SELECT name FROM users WHERE id = $1', [req.user.id])
+      .then(({ rows }) => {
+        if (!rows[0]) return;
+        const preview = text.length > 80 ? text.slice(0, 77) + '…' : text;
+        const route = parentType === 'plan' ? `/checklist/${id}` : `/memories/${id}`;
+        sendPush(pool, partnerId, `${rows[0].name} commented`, preview, { route })
+          .catch(e => console.error('[push] comment', e.message));
+      }).catch(e => console.error('[push] comment lookup', e.message));
+  }
 
   res.json({ id: result.rows[0].id, created_at: result.rows[0].created_at });
 });
