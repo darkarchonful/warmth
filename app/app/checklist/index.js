@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
@@ -33,8 +33,46 @@ export default function Checklist() {
     load();
   }
 
+  // Group subs under their parent. Top-level = items without a parent.
+  const { topLevel, subsByParent } = useMemo(() => {
+    const subs = {};
+    const top = [];
+    for (const it of items) {
+      if (it.parent_checklist_id) {
+        (subs[it.parent_checklist_id] ||= []).push(it);
+      } else {
+        top.push(it);
+      }
+    }
+    return { topLevel: top, subsByParent: subs };
+  }, [items]);
+
+  function renderSub(sub) {
+    const done = sub.you_completed && sub.partner_completed;
+    const toggleLabel = sub.you_completed ? (sub.partner_completed ? '✓' : '✓ (waiting)') : 'Mark done';
+    return (
+      <View key={sub.id} style={styles.subRow}>
+        <View style={styles.subTextWrap}>
+          <Text style={[styles.subTitle, done && styles.subTitleDone]} numberOfLines={1}>
+            {sub.title}
+          </Text>
+          {sub.tagline ? <Text style={styles.subTagline} numberOfLines={1}>{sub.tagline}</Text> : null}
+        </View>
+        {done ? (
+          <Text style={styles.subDone}>✓</Text>
+        ) : (
+          <TouchableOpacity onPress={() => handleComplete(sub.id)} style={styles.subBtn}>
+            <Text style={styles.subBtnText}>{toggleLabel}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
   function renderItem({ item }) {
     const partner = item.partner_name || 'Partner';
+    const subs = subsByParent[item.id] || [];
+    const subsDoneCount = subs.filter(s => s.you_completed && s.partner_completed).length;
 
     const stateRow = (youDone, partnerDone) => (
       <Text style={styles.approvalLine}>
@@ -55,7 +93,9 @@ export default function Checklist() {
         style={[styles.item, item.is_new && styles.itemNew]}
       >
         <View style={styles.itemHeader}>
-          <Text style={styles.itemCategory}>{item.category_name}</Text>
+          <Text style={styles.itemCategory}>
+            {item.is_journey ? 'JOURNEY · ' : ''}{item.category_name}
+          </Text>
           <Text style={[styles.status, styles[`status_${item.status}`]]}>
             {item.status === 'matched' ? 'Confirm' : 'Planned'}
           </Text>
@@ -90,6 +130,13 @@ export default function Checklist() {
             )}
           </>
         )}
+
+        {item.is_journey && subs.length > 0 && (
+          <View style={styles.journeySection}>
+            <Text style={styles.journeyLabel}>Steps · {subsDoneCount} of {subs.length} done</Text>
+            {subs.map(renderSub)}
+          </View>
+        )}
       </TouchableOpacity>
     );
   }
@@ -104,14 +151,14 @@ export default function Checklist() {
         <View style={styles.headerSide} />
       </View>
 
-      {items.length === 0 ? (
+      {topLevel.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyText}>No plans yet</Text>
           <Text style={styles.emptySubtext}>Swipe on ideas together to create plans</Text>
         </View>
       ) : (
         <FlatList
-          data={items}
+          data={topLevel}
           renderItem={renderItem}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={{ padding: 20 }}
@@ -223,6 +270,42 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '500',
+  },
+  journeySection: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.line || '#eee',
+  },
+  journeyLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 10,
+  },
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  subTextWrap: { flex: 1, paddingRight: 10 },
+  subTitle: { fontSize: 14, color: colors.text },
+  subTitleDone: { color: colors.textMuted, textDecorationLine: 'line-through' },
+  subTagline: { fontSize: 12, color: colors.textLight, marginTop: 2 },
+  subBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  subBtnText: { fontSize: 12, color: colors.accent, fontWeight: '500' },
+  subDone: {
+    fontSize: 18,
+    color: colors.success,
+    paddingHorizontal: 10,
   },
   empty: {
     flex: 1,
