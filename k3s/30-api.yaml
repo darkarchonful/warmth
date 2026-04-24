@@ -30,6 +30,14 @@ spec:
               app: warmth-api
       imagePullSecrets:
         - name: ghcr-pull
+      # Pin postgres-warmth to its stable StatefulSet pod IP so we don't
+      # depend on cluster DNS (CoreDNS endpoints include a remote replica
+      # on the tw1.ru control-plane; lookups that hit it across the WAN
+      # overlay can time out under load, crashing the API pod).
+      hostAliases:
+        - ip: 10.42.2.39
+          hostnames:
+            - postgres-warmth
       containers:
         - name: api
           image: ghcr.io/darkarchonful/warmth-api:v8
