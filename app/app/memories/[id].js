@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, API_URL } from '../../lib/api';
@@ -16,10 +16,13 @@ export default function MemoryDetail() {
   const [item, setItem] = useState(null);
   const [meId, setMeId] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
 
   async function reload() {
     const list = await api.getMemories();
-    setItem(list.find(x => x.id.toString() === id));
+    const found = list.find(x => x.id.toString() === id);
+    setItem(found);
+    if (found) setNoteDraft(found.you_note || '');
   }
 
   useEffect(() => {
@@ -31,6 +34,15 @@ export default function MemoryDetail() {
       } catch {}
     })();
   }, [id]);
+
+  async function saveField(patch) {
+    if (!item) return;
+    const localPatch = {};
+    if ('rating' in patch) localPatch.you_rating = patch.rating;
+    if ('note' in patch) localPatch.you_note = patch.note;
+    setItem({ ...item, ...localPatch });
+    try { await api.updateMemory(item.id, patch); } catch {}
+  }
 
   async function handleRequestRepeat() {
     setBusy(true);
@@ -65,28 +77,17 @@ export default function MemoryDetail() {
   }
 
   const partner = item.partner_name || 'Partner';
+  const hasPartnerReaction = item.partner_rating || item.partner_note;
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={{ flex: 1 }} onPress={() => router.back()}>
-          <Text style={styles.back}>Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Memory</Text>
-        <View style={{ flex: 1 }} />
-      </View>
-
+  const headerContent = (
+    <View>
       <View style={styles.headerCard}>
         {item.image_url && (
           <Image source={{ uri: resolveImage(item.image_url) }} style={styles.image} resizeMode="cover" />
         )}
         <View style={styles.meta}>
           <Text style={styles.title}>{item.title}</Text>
-          <Text style={styles.stateLine} numberOfLines={1}>
-            You {item.you_mood || ''} {item.you_rating ? '★'.repeat(item.you_rating) : ''}
-            {'  ·  '}
-            {partner} {item.partner_mood || ''} {item.partner_rating ? '★'.repeat(item.partner_rating) : ''}
-          </Text>
+          {item.tagline ? <Text style={styles.tagline}>{item.tagline}</Text> : null}
         </View>
       </View>
 
@@ -119,10 +120,52 @@ export default function MemoryDetail() {
         </TouchableOpacity>
       )}
 
+      <View style={styles.editorCard}>
+        <Text style={styles.sectionLabel}>Your rating</Text>
+        <View style={styles.starsRow}>
+          {[1, 2, 3, 4, 5].map(n => (
+            <TouchableOpacity key={n} onPress={() => saveField({ rating: item.you_rating === n ? null : n })}>
+              <Text style={styles.star}>{(item.you_rating || 0) >= n ? '★' : '☆'}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.sectionLabel}>Your note</Text>
+        <TextInput
+          style={styles.noteInput}
+          value={noteDraft}
+          onChangeText={setNoteDraft}
+          onBlur={() => { if (noteDraft !== (item.you_note || '')) saveField({ note: noteDraft }); }}
+          placeholder="Remember this one..."
+          placeholderTextColor={colors.textMuted}
+          multiline
+        />
+      </View>
+
+      {hasPartnerReaction && (
+        <View style={styles.partnerPanel}>
+          <Text style={styles.partnerLabel}>{partner} said</Text>
+          {item.partner_rating ? <Text style={styles.partnerRating}>{'★'.repeat(item.partner_rating)}{'☆'.repeat(5 - item.partner_rating)}</Text> : null}
+          {item.partner_note ? <Text style={styles.partnerNote}>"{item.partner_note}"</Text> : null}
+        </View>
+      )}
+
       <View style={styles.divider} />
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity style={{ flex: 1 }} onPress={() => router.back()}>
+          <Text style={styles.back}>Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Memory</Text>
+        <View style={{ flex: 1 }} />
+      </View>
 
       <View style={{ flex: 1 }}>
-        <CommentThread parentType="memory" parentId={item.id} meId={meId} />
+        <CommentThread parentType="memory" parentId={item.id} meId={meId} header={headerContent} />
       </View>
     </View>
   );
@@ -144,9 +187,36 @@ const styles = StyleSheet.create({
   meta: { flex: 1, justifyContent: 'center' },
   title: { fontSize: 22, color: colors.text, fontWeight: '500', marginBottom: 6 },
   tagline: { fontSize: 14, color: colors.textLight, marginBottom: 10 },
-  stateLine: { fontSize: 13, color: colors.textLight, marginBottom: 8 },
-  note: { fontSize: 14, color: colors.text, marginTop: 4 },
-  divider: { height: 1, backgroundColor: colors.line || '#eee' },
+  editorCard: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+  },
+  sectionLabel: { fontSize: 13, color: colors.textLight, marginTop: 6, marginBottom: 8 },
+  starsRow: { flexDirection: 'row', gap: 8 },
+  star: { fontSize: 32, color: '#f5b041' },
+  noteInput: {
+    backgroundColor: colors.bg,
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 80,
+    color: colors.text,
+    fontSize: 15,
+    textAlignVertical: 'top',
+  },
+  partnerPanel: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 14,
+    backgroundColor: colors.warm || '#fff5ee',
+    borderRadius: 14,
+  },
+  partnerLabel: { fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 },
+  partnerRating: { color: '#f5b041', fontSize: 16 },
+  partnerNote: { fontSize: 14, color: colors.text, marginTop: 4, fontStyle: 'italic' },
+  divider: { height: 1, backgroundColor: colors.line || '#eee', marginHorizontal: 20, marginVertical: 10 },
   repeatCta: {
     marginHorizontal: 20,
     marginBottom: 12,

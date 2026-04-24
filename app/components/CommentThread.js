@@ -8,7 +8,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-export default function CommentThread({ parentType, parentId, meId }) {
+export default function CommentThread({ parentType, parentId, meId, header }) {
   const insets = useSafeAreaInsets();
   const [comments, setComments] = useState([]);
   const [partnerSeenAt, setPartnerSeenAt] = useState(null);
@@ -70,6 +70,8 @@ export default function CommentThread({ parentType, parentId, meId }) {
         data={comments}
         keyExtractor={(c) => c.id.toString()}
         contentContainerStyle={{ padding: 20, paddingBottom: 10 }}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={header || null}
         ListEmptyComponent={<Text style={styles.empty}>No messages yet — say something.</Text>}
         renderItem={({ item }) => {
           const mine = item.user_id === meId;
