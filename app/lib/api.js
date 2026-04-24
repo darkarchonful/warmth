@@ -85,6 +85,12 @@ export const api = {
     body: JSON.stringify({ text }),
   }),
 
+  // Push
+  registerPush: (token, platform) => request('/push/register', {
+    method: 'POST',
+    body: JSON.stringify({ token, platform }),
+  }),
+
   // Health (includes backend version)
   health: () => request('/health'),
 };

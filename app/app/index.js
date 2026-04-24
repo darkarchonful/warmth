@@ -5,6 +5,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { colors } from '../lib/colors';
 import { api, API_URL, loadToken, saveToken, clearToken } from '../lib/api';
+import { registerForPush } from '../lib/push';
 import Toast from '../components/Toast';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -36,6 +37,7 @@ export default function Home() {
         setUser(me.user);
         setCouple(me.couple);
         setError('');
+        registerForPush();
         if (me.couple?.paired_at) router.replace('/swipe');
       } catch (e) {
         setError('Google sign-in failed: ' + e.message);
@@ -79,6 +81,7 @@ export default function Home() {
       const data = await api.me();
       setUser(data.user);
       setCouple(data.couple);
+      registerForPush();
       if (data.couple?.paired_at) {
         router.replace('/swipe');
       }
@@ -103,6 +106,7 @@ export default function Home() {
       setUser(me.user);
       setCouple(me.couple);
       setError('');
+      registerForPush();
       if (me.couple?.paired_at) router.replace('/swipe');
     } catch (e) {
       setError('Error: ' + e.message);

@@ -5,6 +5,7 @@ const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const crypto = require('crypto');
+const { sendPush } = require('./push');
 
 const app = express();
 app.use(cors());
@@ -761,6 +762,23 @@ app.post('/comments/:parentType/:id', auth, async (req, res) => {
   await pool.query(`UPDATE ${table} SET updated_at = now(), ${col} = now() WHERE id = $1`, [id]);
 
   res.json({ id: result.rows[0].id, created_at: result.rows[0].created_at });
+});
+
+// Register an Expo push token for the authed user. Called by the app after
+// the OS grants notification permission. Idempotent: re-registering the same
+// token just bumps updated_at (and moves ownership if a different user claimed it).
+app.post('/push/register', auth, async (req, res) => {
+  const { token, platform } = req.body;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'token required' });
+  }
+  await pool.query(
+    `INSERT INTO push_tokens (user_id, token, platform)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (token) DO UPDATE SET user_id = $1, platform = $3, updated_at = NOW()`,
+    [req.user.id, token, platform || null]
+  );
+  res.json({ ok: true });
 });
 
 // Health check
