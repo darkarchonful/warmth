@@ -67,6 +67,10 @@ export const api = {
   approve: (id) => request(`/checklist/${id}/approve`, { method: 'POST' }),
   complete: (id) => request(`/checklist/${id}/complete`, { method: 'POST' }),
   deleteChecklist: (id) => request(`/checklist/${id}`, { method: 'DELETE' }),
+  addCustomSubstep: (id, title, tagline) => request(`/checklist/${id}/custom-substep`, {
+    method: 'POST',
+    body: JSON.stringify({ title, tagline }),
+  }),
 
   // Memories
   getMemories: () => request('/memories'),

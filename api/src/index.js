@@ -461,7 +461,8 @@ app.get('/checklist', auth, async (req, res) => {
      FROM checklist cl
      JOIN activities a ON a.id = cl.activity_id
      JOIN categories c ON c.id = a.category_id
-     WHERE cl.couple_id = $1 AND cl.status <> 'done'
+     WHERE cl.couple_id = $1
+       AND (cl.status <> 'done' OR cl.parent_checklist_id IS NOT NULL)
      ORDER BY cl.updated_at DESC`,
     [coupleId]
   );
@@ -549,6 +550,53 @@ app.post('/checklist/:id/approve', auth, async (req, res) => {
   }).catch(e => console.error('[push] approve lookup', e.message));
 
   res.json({ approved: true });
+});
+
+// Add a custom sub-step to a journey already on the couple's checklist.
+// The new activity is couple-scoped (couple_id set), the new checklist row
+// auto-approved — same shape as the auto-spawned subs, just user-authored.
+app.post('/checklist/:id/custom-substep', auth, async (req, res) => {
+  const title = (req.body.title || '').trim();
+  const tagline = (req.body.tagline || '').trim() || null;
+  if (!title || title.length > 80) return res.status(400).json({ error: 'Title required, max 80 chars' });
+  if (tagline && tagline.length > 120) return res.status(400).json({ error: 'Tagline max 120 chars' });
+
+  const couple = await pool.query(
+    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    [req.user.id]
+  );
+  if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
+  const c = couple.rows[0];
+
+  const parent = await pool.query(
+    `SELECT cl.id, cl.couple_id, cl.parent_checklist_id, a.id AS activity_id, a.is_journey, a.category_id
+     FROM checklist cl JOIN activities a ON a.id = cl.activity_id
+     WHERE cl.id = $1`,
+    [req.params.id]
+  );
+  if (parent.rows.length === 0) return res.status(404).json({ error: 'Parent checklist not found' });
+  const p = parent.rows[0];
+  if (p.couple_id !== c.id) return res.status(403).json({ error: 'Not your checklist' });
+  if (!p.is_journey) return res.status(400).json({ error: 'Parent is not a journey' });
+  if (p.parent_checklist_id !== null) return res.status(400).json({ error: 'Cannot nest under a sub-step' });
+
+  const newActivity = await pool.query(
+    `INSERT INTO activities (category_id, title, tagline, seasons, difficulty, parent_activity_id, couple_id)
+     VALUES ($1, $2, $3, ARRAY['all'], 1, $4, $5)
+     RETURNING id`,
+    [p.category_id, title, tagline, p.activity_id, c.id]
+  );
+  const activityId = newActivity.rows[0].id;
+
+  const newRow = await pool.query(
+    `INSERT INTO checklist (couple_id, activity_id, parent_checklist_id,
+                            approved_by_a, approved_by_b, approved_at, status)
+     VALUES ($1, $2, $3, TRUE, TRUE, NOW(), 'approved')
+     RETURNING id, activity_id, status, approved_by_a, approved_by_b, parent_checklist_id`,
+    [c.id, activityId, p.id]
+  );
+
+  res.json({ ...newRow.rows[0], title, tagline, is_journey: false });
 });
 
 // Complete checklist item

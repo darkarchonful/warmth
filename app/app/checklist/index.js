@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api } from '../../lib/api';
@@ -8,6 +8,10 @@ export default function Checklist() {
   const router = useRouter();
   const [items, setItems] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [addingFor, setAddingFor] = useState(null);
+  const [customTitle, setCustomTitle] = useState('');
+  const [customTagline, setCustomTagline] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     load();
@@ -31,6 +35,33 @@ export default function Checklist() {
   async function handleComplete(id) {
     await api.complete(id);
     load();
+  }
+
+  function openAdder(parentId) {
+    setAddingFor(parentId);
+    setCustomTitle('');
+    setCustomTagline('');
+  }
+
+  function cancelAdder() {
+    setAddingFor(null);
+    setCustomTitle('');
+    setCustomTagline('');
+  }
+
+  async function submitCustom(parentId) {
+    const title = customTitle.trim();
+    if (!title) return;
+    setSubmitting(true);
+    try {
+      await api.addCustomSubstep(parentId, title, customTagline.trim() || null);
+      cancelAdder();
+      await load();
+    } catch (e) {
+      Alert.alert('Could not add step', e.message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   // Group subs under their parent. Top-level = items without a parent.
@@ -131,10 +162,47 @@ export default function Checklist() {
           </>
         )}
 
-        {item.is_journey && subs.length > 0 && (
+        {item.is_journey && (subs.length > 0 || item.status === 'approved') && (
           <View style={styles.journeySection}>
             <Text style={styles.journeyLabel}>Steps · {subsDoneCount} of {subs.length} done</Text>
             {subs.map(renderSub)}
+            {item.status === 'approved' && (addingFor === item.id ? (
+              <View style={styles.addForm}>
+                <TextInput
+                  style={styles.addInput}
+                  placeholder="Step title"
+                  placeholderTextColor={colors.textLight}
+                  value={customTitle}
+                  onChangeText={setCustomTitle}
+                  maxLength={80}
+                  autoFocus
+                />
+                <TextInput
+                  style={styles.addInput}
+                  placeholder="Hint (optional)"
+                  placeholderTextColor={colors.textLight}
+                  value={customTagline}
+                  onChangeText={setCustomTagline}
+                  maxLength={120}
+                />
+                <View style={styles.addBtnRow}>
+                  <TouchableOpacity onPress={cancelAdder} style={[styles.addBtn, styles.addBtnCancel]} disabled={submitting}>
+                    <Text style={styles.addBtnCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => submitCustom(item.id)}
+                    style={[styles.addBtn, (!customTitle.trim() || submitting) && styles.addBtnDisabled]}
+                    disabled={!customTitle.trim() || submitting}
+                  >
+                    <Text style={styles.addBtnText}>{submitting ? 'Saving…' : 'Add step'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={() => openAdder(item.id)} style={styles.addStepBtn}>
+                <Text style={styles.addStepText}>+ Add a step</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         )}
       </TouchableOpacity>
@@ -291,7 +359,7 @@ const styles = StyleSheet.create({
   },
   subTextWrap: { flex: 1, paddingRight: 10 },
   subTitle: { fontSize: 14, color: colors.text },
-  subTitleDone: { color: colors.textMuted, textDecorationLine: 'line-through' },
+  subTitleDone: { color: colors.success, fontWeight: '500' },
   subTagline: { fontSize: 12, color: colors.textLight, marginTop: 2 },
   subBtn: {
     paddingHorizontal: 12,
@@ -306,6 +374,59 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: colors.success,
     paddingHorizontal: 10,
+  },
+  addStepBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  addStepText: {
+    fontSize: 13,
+    color: colors.accent,
+    fontWeight: '500',
+  },
+  addForm: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.line || '#eee',
+  },
+  addInput: {
+    borderWidth: 1,
+    borderColor: colors.line || '#eee',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: colors.text,
+    marginBottom: 8,
+    backgroundColor: colors.bg,
+  },
+  addBtnRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  addBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: colors.accent,
+  },
+  addBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  addBtnCancel: {
+    backgroundColor: 'transparent',
+  },
+  addBtnCancelText: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  addBtnDisabled: {
+    opacity: 0.4,
   },
   empty: {
     flex: 1,
