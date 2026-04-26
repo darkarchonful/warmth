@@ -30,15 +30,19 @@ spec:
               app: warmth-api
       imagePullSecrets:
         - name: ghcr-pull
+      hostAliases:
+        - ip: 10.42.2.39
+          hostnames:
+            - postgres-warmth
       containers:
         - name: api
-          image: ghcr.io/darkarchonful/warmth-api:v7
+          image: ghcr.io/darkarchonful/warmth-api:v8
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
             - name: APP_VERSION
-              value: "v7"
+              value: "v8"
             # TODO: remove before public launch — testing bypass for daily cap
             - name: DISABLE_SWIPE_LIMIT
               value: "1"
