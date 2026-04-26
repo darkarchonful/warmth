@@ -91,6 +91,15 @@ export default function MemoryDetail() {
         </View>
       </View>
 
+      {item.journey_steps && item.journey_steps.length > 0 && (
+        <View style={styles.journeyCard}>
+          <Text style={styles.journeyLabel}>What you did</Text>
+          {item.journey_steps.map((step, idx) => (
+            <Text key={idx} style={styles.journeyStep}>✓ {step}</Text>
+          ))}
+        </View>
+      )}
+
       {item.repeat_requested_by_partner && (
         <View style={styles.repeatBanner}>
           <Text style={styles.repeatBannerText}>{partner} wants to do this again</Text>
@@ -217,6 +226,15 @@ const styles = StyleSheet.create({
   partnerRating: { color: '#f5b041', fontSize: 16 },
   partnerNote: { fontSize: 14, color: colors.text, marginTop: 4, fontStyle: 'italic' },
   divider: { height: 1, backgroundColor: colors.line || '#eee', marginHorizontal: 20, marginVertical: 10 },
+  journeyCard: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 14,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+  },
+  journeyLabel: { fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+  journeyStep: { fontSize: 14, color: colors.text, marginBottom: 4 },
   repeatCta: {
     marginHorizontal: 20,
     marginBottom: 12,

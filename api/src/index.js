@@ -373,6 +373,7 @@ app.get('/activities/next', auth, async (req, res) => {
      WHERE a.id NOT IN (
        SELECT activity_id FROM swipes WHERE user_id = $1 AND couple_id = $2
      )
+     AND a.parent_activity_id IS NULL
      AND ($3 = ANY(a.seasons) OR 'all' = ANY(a.seasons))
      AND a.difficulty <= $4
      ORDER BY a.difficulty, RANDOM()
@@ -456,7 +457,7 @@ app.get('/checklist', auth, async (req, res) => {
   const isA = user_a_id === req.user.id;
 
   const items = await pool.query(
-    `SELECT cl.*, a.title, a.tagline, a.image_url, c.name as category_name
+    `SELECT cl.*, a.title, a.tagline, a.image_url, a.is_journey, c.name as category_name
      FROM checklist cl
      JOIN activities a ON a.id = cl.activity_id
      JOIN categories c ON c.id = a.category_id
@@ -512,6 +513,23 @@ app.post('/checklist/:id/approve', auth, async (req, res) => {
       "UPDATE checklist SET status = 'approved', approved_at = NOW(), updated_at = NOW() WHERE id = $1",
       [req.params.id]
     );
+    // If the approved activity is a journey, spawn its sub-checklist rows.
+    // Subs are auto-approved — the couple committed to the journey theme, so
+    // each step skips the swipe/approve dance. Idempotent via NOT EXISTS.
+    await pool.query(
+      `INSERT INTO checklist (couple_id, activity_id, parent_checklist_id,
+                              approved_by_a, approved_by_b, approved_at, status)
+       SELECT $1, sub.id, $2, TRUE, TRUE, NOW(), 'approved'
+       FROM activities parent
+       JOIN activities sub ON sub.parent_activity_id = parent.id
+       WHERE parent.id = (SELECT activity_id FROM checklist WHERE id = $2)
+         AND parent.is_journey = TRUE
+         AND NOT EXISTS (
+           SELECT 1 FROM checklist sc
+           WHERE sc.parent_checklist_id = $2 AND sc.activity_id = sub.id
+         )`,
+      [c.id, req.params.id]
+    );
   }
   // Notify partner — context-aware copy.
   const partnerId = isA ? c.user_b_id : c.user_a_id;
@@ -550,24 +568,44 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
     [req.params.id, c.id]
   );
 
-  const item = await pool.query('SELECT * FROM checklist WHERE id = $1', [req.params.id]);
+  const item = await pool.query(
+    `SELECT cl.*, a.is_journey
+     FROM checklist cl JOIN activities a ON a.id = cl.activity_id
+     WHERE cl.id = $1`,
+    [req.params.id]
+  );
+  const isSub = item.rows[0].parent_checklist_id !== null;
+  const isJourney = item.rows[0].is_journey === true;
   const bothDone = item.rows[0].completed_by_a && item.rows[0].completed_by_b;
   if (bothDone) {
     await pool.query(
       "UPDATE checklist SET status = 'done', completed_at = NOW(), updated_at = NOW() WHERE id = $1",
       [req.params.id]
     );
-    // Create memory with denormalized activity info so it survives
-    // checklist cleanup as a permanent scrapbook entry.
-    await pool.query(
-      `INSERT INTO memories (couple_id, checklist_id, activity_id, activity_title, activity_tagline, activity_image_url, activity_category)
-       SELECT $1, $2, a.id, a.title, a.tagline, a.image_url, cat.name
-       FROM activities a
-       JOIN categories cat ON cat.id = a.category_id
-       JOIN checklist cl ON cl.activity_id = a.id
-       WHERE cl.id = $2`,
-      [c.id, req.params.id]
-    );
+    // Sub-steps never create their own memory — the journey rolls up into
+    // one rich memory when the parent completes.
+    if (!isSub) {
+      let journeySteps = null;
+      if (isJourney) {
+        const steps = await pool.query(
+          `SELECT a.title
+           FROM checklist sc JOIN activities a ON a.id = sc.activity_id
+           WHERE sc.parent_checklist_id = $1 AND sc.status = 'done'
+           ORDER BY sc.completed_at`,
+          [req.params.id]
+        );
+        journeySteps = steps.rows.map(r => r.title);
+      }
+      await pool.query(
+        `INSERT INTO memories (couple_id, checklist_id, activity_id, activity_title, activity_tagline, activity_image_url, activity_category, journey_steps)
+         SELECT $1, $2, a.id, a.title, a.tagline, a.image_url, cat.name, $3
+         FROM activities a
+         JOIN categories cat ON cat.id = a.category_id
+         JOIN checklist cl ON cl.activity_id = a.id
+         WHERE cl.id = $2`,
+        [c.id, req.params.id, journeySteps]
+      );
+    }
   }
   // Notify partner.
   const partnerId = isA ? c.user_b_id : c.user_a_id;
@@ -578,11 +616,18 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
     [req.user.id, req.params.id]
   ).then(({ rows }) => {
     if (!rows[0]) return;
-    const title = bothDone ? 'Memory added' : 'Did you do it too?';
-    const body = bothDone
-      ? `You two did ${rows[0].activity_title}`
-      : `${rows[0].me_name} marked ${rows[0].activity_title} done`;
-    const route = bothDone ? '/memories' : '/checklist';
+    let title, body, route;
+    if (isSub) {
+      title = bothDone ? 'Step done' : 'Step checked off';
+      body = `${rows[0].me_name} ✓ ${rows[0].activity_title}`;
+      route = '/checklist';
+    } else {
+      title = bothDone ? 'Memory added' : 'Did you do it too?';
+      body = bothDone
+        ? `You two did ${rows[0].activity_title}`
+        : `${rows[0].me_name} marked ${rows[0].activity_title} done`;
+      route = bothDone ? '/memories' : '/checklist';
+    }
     sendPush(pool, partnerId, title, body, { route })
       .catch(e => console.error('[push] complete', e.message));
   }).catch(e => console.error('[push] complete lookup', e.message));
@@ -633,7 +678,7 @@ app.get('/memories', auth, async (req, res) => {
             activity_title AS title, activity_tagline AS tagline,
             activity_image_url AS image_url, activity_category AS category_name,
             rating_a, rating_b, mood_a, mood_b, note_a, note_b,
-            repeat_requested_by, repeat_requested_at
+            repeat_requested_by, repeat_requested_at, journey_steps
      FROM memories
      WHERE couple_id = $1
      ORDER BY completed_at DESC`,
@@ -646,6 +691,7 @@ app.get('/memories', auth, async (req, res) => {
     id: r.id, couple_id: r.couple_id, checklist_id: r.checklist_id,
     photo_url: r.photo_url, completed_at: r.completed_at, updated_at: r.updated_at,
     title: r.title, tagline: r.tagline, image_url: r.image_url, category_name: r.category_name,
+    journey_steps: r.journey_steps,
     you_rating: isA ? r.rating_a : r.rating_b,
     partner_rating: isA ? r.rating_b : r.rating_a,
     you_mood: isA ? r.mood_a : r.mood_b,
