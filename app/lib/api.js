@@ -61,6 +61,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ liked }),
   }),
+  createCustom: (payload) => request('/activities/custom', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }),
 
   // Checklist
   getChecklist: () => request('/checklist'),

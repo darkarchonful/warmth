@@ -366,6 +366,48 @@ app.get('/activities/next', auth, async (req, res) => {
   else if (swipeCount >= 10) maxDifficulty = 3;
   else if (swipeCount >= 5) maxDifficulty = 2;
 
+  // Custom-card prompt trigger. Unlocks once the couple has any memory,
+  // or after 30 swipes if the indecisive type never finishes a plan.
+  // Per-user cadence: random window around N=10 (or N=20 after the couple
+  // has authored 3 customs). Stateful via users.next_prompt_at_swipe so
+  // the offset is consistent across calls until it actually fires.
+  const memCount = await pool.query(
+    'SELECT COUNT(*)::int AS n FROM memories WHERE couple_id = $1',
+    [coupleId]
+  );
+  const customCount = await pool.query(
+    'SELECT COUNT(*)::int AS n FROM activities WHERE couple_id = $1 AND parent_activity_id IS NULL',
+    [coupleId]
+  );
+  const userSwipes = await pool.query(
+    'SELECT COUNT(*)::int AS n FROM swipes WHERE user_id = $1',
+    [req.user.id]
+  );
+  const memories = memCount.rows[0].n;
+  const customs = customCount.rows[0].n;
+  const userSwipeCount = userSwipes.rows[0].n;
+  const unlocked = memories >= 1 || (userSwipeCount >= 30 && memories === 0);
+
+  if (unlocked) {
+    const userRow = await pool.query(
+      'SELECT next_prompt_at_swipe, prompts_served FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    let nextAt = userRow.rows[0].next_prompt_at_swipe;
+    const served = userRow.rows[0].prompts_served;
+    // First time crossing the unlock line — treat this call as the trigger.
+    if (nextAt === null) nextAt = userSwipeCount;
+    if (userSwipeCount >= nextAt) {
+      const N = customs < 3 ? 10 : 20;
+      const newNext = userSwipeCount + (N - 2) + Math.floor(Math.random() * 5);
+      await pool.query(
+        'UPDATE users SET next_prompt_at_swipe = $1, prompts_served = prompts_served + 1 WHERE id = $2',
+        [newNext, req.user.id]
+      );
+      return res.json({ prompt: 'custom', mode: served === 0 ? 'onboarding' : 'recurring' });
+    }
+  }
+
   const activities = await pool.query(
     `SELECT a.*, c.name as category_name
      FROM activities a
@@ -375,8 +417,11 @@ app.get('/activities/next', auth, async (req, res) => {
      )
      AND a.parent_activity_id IS NULL
      AND ($3 = ANY(a.seasons) OR 'all' = ANY(a.seasons))
-     AND a.difficulty <= $4
-     ORDER BY a.difficulty, RANDOM()
+     AND (
+       a.couple_id = $2
+       OR (a.couple_id IS NULL AND a.difficulty <= $4)
+     )
+     ORDER BY (a.couple_id IS NOT NULL) DESC, a.difficulty, RANDOM()
      LIMIT 5`,
     [req.user.id, coupleId, season, maxDifficulty]
   );
@@ -385,6 +430,49 @@ app.get('/activities/next', auth, async (req, res) => {
     return res.json({ done: true, message: 'No more activities to swipe' });
   }
   res.json({ queue: activities.rows });
+});
+
+// Create a custom top-level swipe card. Couple-private (couple_id set).
+// Creator implicitly swipes yes — partner sees it in the deck and decides.
+// Defaults: category=5 (Daily), seasons=['all']. Difficulty 1–5, default 1.
+app.post('/activities/custom', auth, async (req, res) => {
+  const title = (req.body.title || '').trim();
+  const tagline = (req.body.tagline || '').trim() || null;
+  const difficulty = Number.isInteger(req.body.difficulty) ? req.body.difficulty : 1;
+  const categoryId = Number.isInteger(req.body.category_id) ? req.body.category_id : 5;
+  if (!title || title.length > 80) return res.status(400).json({ error: 'Title required, max 80 chars' });
+  if (tagline && tagline.length > 120) return res.status(400).json({ error: 'Tagline max 120 chars' });
+  if (difficulty < 1 || difficulty > 5) return res.status(400).json({ error: 'Difficulty must be 1-5' });
+
+  const couple = await pool.query(
+    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE AND user_b_id IS NOT NULL',
+    [req.user.id]
+  );
+  if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
+  const coupleId = couple.rows[0].id;
+
+  const cat = await pool.query('SELECT id FROM categories WHERE id = $1', [categoryId]);
+  if (cat.rows.length === 0) return res.status(400).json({ error: 'Invalid category' });
+
+  // The activities table has a BEFORE INSERT trigger that rewrites
+  // difficulty=3 to the category default (it can't distinguish user-passed
+  // 3 from the column default). Insert without difficulty, then UPDATE.
+  const newAct = await pool.query(
+    `INSERT INTO activities (category_id, title, tagline, seasons, couple_id)
+     VALUES ($1, $2, $3, ARRAY['all'], $4)
+     RETURNING id, title, tagline, category_id, couple_id`,
+    [categoryId, title, tagline, coupleId]
+  );
+  const activity = newAct.rows[0];
+  await pool.query('UPDATE activities SET difficulty = $1 WHERE id = $2', [difficulty, activity.id]);
+  activity.difficulty = difficulty;
+
+  await pool.query(
+    'INSERT INTO swipes (user_id, couple_id, activity_id, liked) VALUES ($1, $2, $3, TRUE)',
+    [req.user.id, coupleId, activity.id]
+  );
+
+  res.json(activity);
 });
 
 // Swipe on activity
