@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, PanResponder, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, PanResponder, Image, Alert, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { PinchGestureHandler, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../lib/colors';
@@ -34,6 +34,21 @@ function PulsingDot() {
 const { width: SCREEN_W } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_W * 0.25;
 
+const ONBOARDING_EXAMPLES = [
+  'Sunday pancakes',
+  'The walk in the rain',
+  'Movie + popcorn night',
+  'A long talk before bed',
+  'Cooking together with music',
+];
+const RECURRING_EXAMPLES = [
+  'Saturday market run',
+  'Pizza Friday',
+  'Read together for 20 min',
+  'A trip to a new neighborhood',
+  'Sunset coffee on the balcony',
+];
+
 export default function Swipe() {
   const router = useRouter();
   const [activity, setActivity] = useState(null);
@@ -47,6 +62,30 @@ export default function Swipe() {
   const [unreadMem, setUnreadMem] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [partnerName, setPartnerName] = useState('');
+  const [customFormVisible, setCustomFormVisible] = useState(false);
+  const [customMode, setCustomMode] = useState('recurring');
+  const [customTitle, setCustomTitle] = useState('');
+  const [customTagline, setCustomTagline] = useState('');
+  const [customSubmitting, setCustomSubmitting] = useState(false);
+  const [customPlaceholder, setCustomPlaceholder] = useState('');
+  const [customSent, setCustomSent] = useState(false);
+  const customTitleRef = useRef(null);
+
+  useEffect(() => {
+    if (customFormVisible) {
+      const t = setTimeout(() => customTitleRef.current?.focus(), 350);
+      return () => clearTimeout(t);
+    }
+  }, [customFormVisible]);
+
+  function openCustomForm(mode) {
+    const examples = mode === 'onboarding' ? ONBOARDING_EXAMPLES : RECURRING_EXAMPLES;
+    setCustomMode(mode);
+    setCustomTitle('');
+    setCustomTagline('');
+    setCustomPlaceholder(examples[Math.floor(Math.random() * examples.length)]);
+    setCustomFormVisible(true);
+  }
 
   const pan = useRef(new Animated.ValueXY()).current;
   const activityRef = useRef(null);
@@ -118,6 +157,21 @@ export default function Swipe() {
         setDone(true);
         return;
       }
+      // Server can return a synthetic "write your own card" prompt instead
+      // of an activity. Inject it as a non-DB card; handleSwipe short-circuits
+      // for these so no /swipe call is made.
+      if (data.prompt === 'custom') {
+        const promptCard = { __prompt: true, id: 'prompt-' + Date.now(), mode: data.mode };
+        queueRef.current.unshift(promptCard);
+        if (setFirst) {
+          const first = queueRef.current.shift();
+          setBlocked(false);
+          setDone(false);
+          pan.setValue({ x: 0, y: 0 });
+          setActivity(first);
+        }
+        return;
+      }
       const incoming = Array.isArray(data.queue) ? data.queue : [data];
       const existing = new Set(queueRef.current.map(a => a.id));
       if (activityRef.current?.id) existing.add(activityRef.current.id);
@@ -142,6 +196,11 @@ export default function Swipe() {
   async function handleSwipe(liked) {
     const current = activityRef.current;
     if (!current) return;
+    if (current.__prompt) {
+      // Prompt cards are non-swipeable; user interacts via the on-card button
+      // or the Skip link. This branch should not normally be hit.
+      return;
+    }
     try {
       const result = await api.swipe(current.id, liked);
       if (result.match) {
@@ -156,6 +215,34 @@ export default function Swipe() {
     } catch (e) {
       console.error(e);
     }
+  }
+
+  async function submitCustom() {
+    const title = customTitle.trim();
+    if (!title) return;
+    setCustomSubmitting(true);
+    try {
+      await api.createCustom({ title, tagline: customTagline.trim() || null, difficulty: 1 });
+      setCustomFormVisible(false);
+      setCustomTitle('');
+      setCustomTagline('');
+      setCustomSent(true);
+      setTimeout(() => {
+        setCustomSent(false);
+        loadNext();
+      }, 1500);
+    } catch (e) {
+      Alert.alert('Could not save card', e.message);
+    } finally {
+      setCustomSubmitting(false);
+    }
+  }
+
+  function cancelCustomForm() {
+    setCustomFormVisible(false);
+    setCustomTitle('');
+    setCustomTagline('');
+    loadNext();
   }
 
   function flyOff(liked) {
@@ -199,8 +286,8 @@ export default function Swipe() {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: (e) => e.nativeEvent.touches.length < 2,
-      onMoveShouldSetPanResponder: (e, g) => e.nativeEvent.touches.length < 2 && Math.abs(g.dx) > 5,
+      onStartShouldSetPanResponder: (e) => e.nativeEvent.touches.length < 2 && !activityRef.current?.__prompt,
+      onMoveShouldSetPanResponder: (e, g) => e.nativeEvent.touches.length < 2 && !activityRef.current?.__prompt && Math.abs(g.dx) > 5,
       onPanResponderTerminationRequest: () => true,
       onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
       onPanResponderRelease: (_, g) => {
@@ -281,6 +368,20 @@ export default function Swipe() {
     );
   }
 
+  if (customSent) {
+    return (
+      <View style={styles.matchContainer}>
+        <View style={styles.matchCenter}>
+          <Text style={styles.matchEmoji}>💛</Text>
+          <Text style={styles.matchTitle}>
+            Sent to {partnerName || 'your partner'}'s deck
+          </Text>
+          <Text style={styles.matchFooter}>They'll see it next time they swipe</Text>
+        </View>
+      </View>
+    );
+  }
+
   if (!activity) {
     return (
       <View style={styles.container}>
@@ -326,76 +427,169 @@ export default function Swipe() {
         {...panResponder.panHandlers}
         style={[
           styles.card,
+          activity.__prompt && styles.promptCard,
           { transform: [{ translateX: pan.x }, { translateY: pan.y }, { rotate }] },
         ]}
       >
-        <PinchGestureHandler
-          ref={pinchRef}
-          simultaneousHandlers={zoomPanRef}
-          onGestureEvent={onPinchEvent}
-          onHandlerStateChange={onPinchStateChange}
-        >
-          <Animated.View style={[styles.cardImage, zooming && { zIndex: 100, elevation: 20, overflow: 'visible' }]}>
-            <PanGestureHandler
-              ref={zoomPanRef}
-              simultaneousHandlers={pinchRef}
-              minPointers={2}
-              onGestureEvent={onZoomPanEvent}
-              onHandlerStateChange={onZoomPanStateChange}
+        {activity.__prompt ? (
+          <View style={styles.promptInner}>
+            <Text style={styles.promptHeart}>💛</Text>
+            <Text style={styles.promptTitle}>
+              {activity.mode === 'onboarding' ? 'Write something just yours' : 'Your turn'}
+            </Text>
+            <Text style={styles.promptTagline}>
+              {activity.mode === 'onboarding'
+                ? 'A moment, a tradition, an inside joke — anything you’d both want again.'
+                : 'Add another one — something specific to you two.'}
+            </Text>
+            <TouchableOpacity
+              style={styles.promptButton}
+              onPress={() => openCustomForm(activity.mode || 'recurring')}
+              activeOpacity={0.85}
             >
-              {activity.image_url ? (
-                <Animated.Image
-                  key={activity.id}
-                  source={{ uri: resolveImage(activity.image_url) }}
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      opacity: revealOpacity,
-                      transform: [
-                        { translateX: zoomTx },
-                        { translateY: zoomTy },
-                        { scale: pinchScale },
-                      ],
-                    },
-                  ]}
-                  resizeMode="cover"
-                />
-              ) : (
-                <Animated.Text key={activity.id} style={[styles.categoryIcon, { opacity: revealOpacity }]}>
-                  {getCategoryIcon(activity.category_name)}
-                </Animated.Text>
-              )}
-            </PanGestureHandler>
-          </Animated.View>
-        </PinchGestureHandler>
-        <View style={styles.cardContent}>
-          <Text style={styles.category}>{activity.category_name}</Text>
-          <Text style={styles.cardTitle}>{activity.title}</Text>
-          <Animated.Text style={[styles.cardTagline, { opacity: revealOpacity }]}>{activity.tagline}</Animated.Text>
-        </View>
+              <Text style={styles.promptButtonText}>
+                {activity.mode === 'onboarding' ? 'Write your first card' : 'Write a card'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <PinchGestureHandler
+              ref={pinchRef}
+              simultaneousHandlers={zoomPanRef}
+              onGestureEvent={onPinchEvent}
+              onHandlerStateChange={onPinchStateChange}
+            >
+              <Animated.View style={[styles.cardImage, zooming && { zIndex: 100, elevation: 20, overflow: 'visible' }]}>
+                <PanGestureHandler
+                  ref={zoomPanRef}
+                  simultaneousHandlers={pinchRef}
+                  minPointers={2}
+                  onGestureEvent={onZoomPanEvent}
+                  onHandlerStateChange={onZoomPanStateChange}
+                >
+                  {activity.image_url ? (
+                    <Animated.Image
+                      key={activity.id}
+                      source={{ uri: resolveImage(activity.image_url) }}
+                      style={[
+                        StyleSheet.absoluteFill,
+                        {
+                          opacity: revealOpacity,
+                          transform: [
+                            { translateX: zoomTx },
+                            { translateY: zoomTy },
+                            { scale: pinchScale },
+                          ],
+                        },
+                      ]}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Animated.Text key={activity.id} style={[styles.categoryIcon, { opacity: revealOpacity }]}>
+                      {getCategoryIcon(activity.category_name)}
+                    </Animated.Text>
+                  )}
+                </PanGestureHandler>
+              </Animated.View>
+            </PinchGestureHandler>
+            <View style={styles.cardContent}>
+              <Text style={styles.category}>{activity.category_name}</Text>
+              <Text style={styles.cardTitle}>{activity.title}</Text>
+              <Animated.Text style={[styles.cardTagline, { opacity: revealOpacity }]}>{activity.tagline}</Animated.Text>
+            </View>
+          </>
+        )}
 
-        <Animated.View style={[styles.overlay, styles.likeOverlay, { opacity: likeOpacity }]}>
-          <Text style={styles.likeText}>LOVE</Text>
-        </Animated.View>
-        <Animated.View style={[styles.overlay, styles.skipOverlay, { opacity: skipOpacity }]}>
-          <Text style={styles.skipOverlayText}>SKIP</Text>
-        </Animated.View>
+        {!activity.__prompt && (
+          <>
+            <Animated.View style={[styles.overlay, styles.likeOverlay, { opacity: likeOpacity }]}>
+              <Text style={styles.likeText}>LOVE</Text>
+            </Animated.View>
+            <Animated.View style={[styles.overlay, styles.skipOverlay, { opacity: skipOpacity }]}>
+              <Text style={styles.skipOverlayText}>SKIP</Text>
+            </Animated.View>
+          </>
+        )}
       </Animated.View>
 
-      <View style={styles.buttons}>
-        <TouchableOpacity
-          style={[styles.swipeBtn, styles.skipBtn]}
-          onPress={() => flyOff(false)}
+      {activity.__prompt ? (
+        <View style={styles.buttons}>
+          <TouchableOpacity
+            style={styles.promptSkipLink}
+            onPress={() => loadNext()}
+            activeOpacity={0.6}
+          >
+            <Text style={styles.promptSkipLinkText}>Skip for now</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.buttons}>
+          <TouchableOpacity
+            style={[styles.swipeBtn, styles.skipBtn]}
+            onPress={() => flyOff(false)}
+          >
+            <Text style={styles.skipText}>Skip</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.swipeBtn, styles.loveBtn]}
+            onPress={() => flyOff(true)}
+          >
+            <Text style={styles.loveText}>Love this</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <Modal visible={customFormVisible} transparent animationType="slide" onRequestClose={cancelCustomForm}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
         >
-          <Text style={styles.skipText}>Skip</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.swipeBtn, styles.loveBtn]}
-          onPress={() => flyOff(true)}
-        >
-          <Text style={styles.loveText}>Love this</Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>
+              {customMode === 'onboarding' ? 'Your first one' : 'Write a card'}
+            </Text>
+            <Text style={styles.modalSubtitle}>
+              {customMode === 'onboarding'
+                ? 'Just a name — something the two of you would want to do again.'
+                : 'Something personal — a tradition, a tiny ritual, an idea you keep coming back to.'}
+            </Text>
+            <TextInput
+              ref={customTitleRef}
+              style={styles.modalInput}
+              placeholder={customPlaceholder || 'Sunday pancakes'}
+              placeholderTextColor={colors.textLight}
+              value={customTitle}
+              onChangeText={setCustomTitle}
+              maxLength={80}
+            />
+            {customMode !== 'onboarding' && (
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Hint (optional)"
+                placeholderTextColor={colors.textLight}
+                value={customTagline}
+                onChangeText={setCustomTagline}
+                maxLength={120}
+              />
+            )}
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity onPress={cancelCustomForm} style={[styles.modalBtn, styles.modalCancel]} disabled={customSubmitting}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={submitCustom}
+                style={[styles.modalBtn, (!customTitle.trim() || customSubmitting) && styles.modalBtnDisabled]}
+                disabled={!customTitle.trim() || customSubmitting}
+              >
+                <Text style={styles.modalSaveText}>{customSubmitting ? 'Saving…' : 'Save card'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Menu
         visible={menuOpen}
@@ -634,6 +828,120 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '500',
+  },
+  promptCard: {
+    backgroundColor: '#F8E2C8',
+    shadowOpacity: 0,
+    elevation: 0,
+    minHeight: 460,
+    justifyContent: 'center',
+  },
+  promptInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 50,
+    paddingHorizontal: 30,
+  },
+  promptHeart: {
+    fontSize: 56,
+    marginBottom: 18,
+  },
+  promptTitle: {
+    fontSize: 24,
+    color: colors.text,
+    fontWeight: '500',
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  promptTagline: {
+    fontSize: 15,
+    color: colors.text,
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 8,
+    marginBottom: 28,
+    opacity: 0.7,
+  },
+  promptButton: {
+    backgroundColor: colors.accent,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 28,
+  },
+  promptButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  promptSkipLink: {
+    alignSelf: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  promptSkipLinkText: {
+    color: colors.textLight,
+    fontSize: 14,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalTitle: {
+    fontSize: 20,
+    color: colors.text,
+    marginBottom: 6,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: colors.textLight,
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: colors.line || '#eee',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: colors.text,
+    marginBottom: 10,
+    backgroundColor: colors.bg,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 6,
+  },
+  modalBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: colors.accent,
+  },
+  modalSaveText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  modalCancel: {
+    backgroundColor: 'transparent',
+  },
+  modalCancelText: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  modalBtnDisabled: {
+    opacity: 0.4,
   },
   previewRow: {
     flexDirection: 'row',
