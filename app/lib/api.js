@@ -46,6 +46,7 @@ export const api = {
 
   // User
   me: () => request('/me'),
+  deleteAccount: () => request('/me', { method: 'DELETE' }),
 
   // Couple
   createCouple: () => request('/couple/create', { method: 'POST' }),
