@@ -170,6 +170,28 @@ export default function Swipe() {
         }
         return;
       }
+      if (data.nudge) {
+        const n = data.nudge;
+        const nudgeCard = {
+          __nudge: true,
+          id: 'nudge-' + n.id,
+          memory_id: n.id,
+          title: n.activity_title,
+          tagline: n.activity_tagline,
+          image_url: n.activity_image_url,
+          category_name: n.activity_category,
+          days_ago: n.days_ago,
+        };
+        queueRef.current.unshift(nudgeCard);
+        if (setFirst) {
+          const first = queueRef.current.shift();
+          setBlocked(false);
+          setDone(false);
+          pan.setValue({ x: 0, y: 0 });
+          setActivity(first);
+        }
+        return;
+      }
       const incoming = Array.isArray(data.queue) ? data.queue : [data];
       const existing = new Set(queueRef.current.map(a => a.id));
       if (activityRef.current?.id) existing.add(activityRef.current.id);
@@ -197,6 +219,20 @@ export default function Swipe() {
     if (current.__prompt) {
       // Prompt cards are non-swipeable; user interacts via the on-card button
       // or the Skip link. This branch should not normally be hit.
+      return;
+    }
+    if (current.__nudge) {
+      try {
+        const result = await api.nudgeSwipe(current.memory_id, liked);
+        if (result.match) {
+          setMatchPopup(current.title);
+          setTimeout(() => { setMatchPopup(null); loadNext(); }, 2500);
+        } else {
+          loadNext();
+        }
+      } catch (e) {
+        console.error(e);
+      }
       return;
     }
     try {
@@ -492,6 +528,13 @@ export default function Swipe() {
               </Animated.View>
             </PinchGestureHandler>
             <View style={styles.cardContent}>
+              {activity.__nudge && (
+                <View style={styles.nudgeBadge}>
+                  <Text style={styles.nudgeBadgeText}>
+                    💛 Loved {activity.days_ago === 0 ? 'today' : activity.days_ago === 1 ? 'yesterday' : `${activity.days_ago} days ago`} · again?
+                  </Text>
+                </View>
+              )}
               <Text style={styles.category}>{activity.category_name}</Text>
               <Text style={styles.cardTitle}>{activity.title}</Text>
               <Animated.Text style={[styles.cardTagline, { opacity: revealOpacity }]}>{activity.tagline}</Animated.Text>
@@ -737,6 +780,19 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 2,
     marginBottom: 8,
+  },
+  nudgeBadge: {
+    backgroundColor: '#F4E6CC',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  nudgeBadgeText: {
+    fontSize: 11,
+    color: colors.text,
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
   cardTitle: {
     fontSize: 22,
