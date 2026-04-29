@@ -3,8 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, PanResp
 import { PinchGestureHandler, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../lib/colors';
-import { api, API_URL, clearToken } from '../lib/api';
-import Menu from '../components/Menu';
+import { api, API_URL } from '../lib/api';
 
 function resolveImage(url) {
   if (!url) return null;
@@ -60,7 +59,6 @@ export default function Swipe() {
   const [backendVersion, setBackendVersion] = useState('');
   const [unread, setUnread] = useState(0);
   const [unreadMem, setUnreadMem] = useState(0);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [partnerName, setPartnerName] = useState('');
   const [customFormVisible, setCustomFormVisible] = useState(false);
   const [customMode, setCustomMode] = useState('recurring');
@@ -408,7 +406,7 @@ export default function Swipe() {
           onPressOut={() => {
             Animated.spring(titleScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
           }}
-          onPress={() => setMenuOpen(true)}
+          onPress={() => router.push('/settings')}
         >
           <Animated.View style={[styles.navPill, { transform: [{ scale: titleScale }] }]}>
             <Text style={styles.navTitle}>Warmth{backendVersion ? ` · ${backendVersion}` : ''}</Text>
@@ -590,21 +588,6 @@ export default function Swipe() {
         </View>
         </KeyboardAvoidingView>
       </Modal>
-
-      <Menu
-        visible={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        partnerName={partnerName}
-        onUnpair={async () => {
-          setMenuOpen(false);
-          try { await api.unpair(); router.replace('/'); } catch (e) { Alert.alert('Error', e.message); }
-        }}
-        onLogout={async () => {
-          setMenuOpen(false);
-          await clearToken();
-          router.replace('/');
-        }}
-      />
     </View>
   );
 }

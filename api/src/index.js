@@ -121,6 +121,60 @@ app.get('/me', auth, async (req, res) => {
   res.json({ user: user.rows[0], couple: couple.rows[0] || null, unreadCount, unreadMemories });
 });
 
+// Delete account: wipes the user and any couple they belong to (with all
+// shared swipes/checklist/memories/customs). Apple guideline 5.1.1(v).
+app.delete('/me', auth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const userId = req.user.id;
+
+    const couples = await client.query(
+      'SELECT id, user_a_id, user_b_id FROM couples WHERE user_a_id = $1 OR user_b_id = $1 FOR UPDATE',
+      [userId]
+    );
+    const coupleIds = couples.rows.map(r => r.id);
+    const partnerIds = couples.rows
+      .map(r => (r.user_a_id === userId ? r.user_b_id : r.user_a_id))
+      .filter(id => id && id !== userId);
+
+    if (coupleIds.length > 0) {
+      await client.query(
+        `DELETE FROM comments WHERE
+           (parent_type='memory' AND parent_id IN (SELECT id FROM memories WHERE couple_id = ANY($1::int[])))
+           OR (parent_type='plan' AND parent_id IN (SELECT id FROM checklist WHERE couple_id = ANY($1::int[])))`,
+        [coupleIds]
+      );
+      await client.query('DELETE FROM memories WHERE couple_id = ANY($1::int[])', [coupleIds]);
+      await client.query('DELETE FROM checklist WHERE couple_id = ANY($1::int[])', [coupleIds]);
+      await client.query('DELETE FROM swipes WHERE couple_id = ANY($1::int[])', [coupleIds]);
+      await client.query('DELETE FROM activities WHERE couple_id = ANY($1::int[])', [coupleIds]);
+      await client.query('DELETE FROM couples WHERE id = ANY($1::int[])', [coupleIds]);
+    }
+
+    await client.query('DELETE FROM swipes WHERE user_id = $1', [userId]);
+    await client.query('UPDATE memories SET repeat_requested_by = NULL WHERE repeat_requested_by = $1', [userId]);
+    await client.query('UPDATE couples SET ended_by = NULL WHERE ended_by = $1', [userId]);
+    await client.query('DELETE FROM users WHERE id = $1', [userId]);
+
+    await client.query('COMMIT');
+
+    for (const partnerId of partnerIds) {
+      sendPush(pool, partnerId, 'Pairing ended',
+        'Your partner deleted their account',
+        { route: '/' }
+      ).catch(e => console.error('[push] account delete', e.message));
+    }
+
+    res.json({ message: 'Account deleted' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Create invite (start a couple). If user already has a pending invite
 // (user_b_id IS NULL), rotate the code instead of rejecting.
 app.post('/couple/create', auth, async (req, res) => {
