@@ -462,6 +462,85 @@ app.get('/activities/next', auth, async (req, res) => {
     }
   }
 
+  // Loved-memory nudges. Occasionally resurface a past activity the couple
+  // enjoyed (both rated >=4) or never rated (giving it a second look). Two
+  // paths: (1) a nudge cycle is already in flight — partner already swiped,
+  // we owe this user a card; (2) start a new cycle if the cadence hits.
+  const coupleRowForSide = await pool.query(
+    'SELECT user_a_id FROM couples WHERE id = $1',
+    [coupleId]
+  );
+  const isA = coupleRowForSide.rows[0].user_a_id === req.user.id;
+  const myCol = isA ? 'a' : 'b';
+  const partnerCol = isA ? 'b' : 'a';
+
+  const pendingNudge = await pool.query(
+    `SELECT m.id, m.activity_id,
+            a.title AS activity_title, a.tagline AS activity_tagline,
+            a.image_url AS activity_image_url, c.name AS activity_category,
+            m.completed_at,
+            EXTRACT(DAY FROM NOW() - m.completed_at)::int AS days_ago
+     FROM memories m
+     JOIN activities a ON a.id = m.activity_id
+     JOIN categories c ON c.id = a.category_id
+     WHERE m.couple_id = $1
+       AND m.nudge_response_${myCol} IS NULL
+       AND m.nudge_response_${partnerCol} = TRUE
+       AND m.activity_id IS NOT NULL
+     ORDER BY m.updated_at DESC
+     LIMIT 1`,
+    [coupleId]
+  );
+  if (pendingNudge.rows.length > 0) {
+    return res.json({ nudge: pendingNudge.rows[0] });
+  }
+
+  const nudgeRow = await pool.query(
+    'SELECT next_nudge_at_swipe FROM users WHERE id = $1',
+    [req.user.id]
+  );
+  let nextNudgeAt = nudgeRow.rows[0].next_nudge_at_swipe;
+  if (nextNudgeAt === null) nextNudgeAt = userSwipeCount + 8 + Math.floor(Math.random() * 6);
+  if (userSwipeCount >= nextNudgeAt) {
+    const eligible = await pool.query(
+      `SELECT m.id, m.activity_id,
+              a.title AS activity_title, a.tagline AS activity_tagline,
+              a.image_url AS activity_image_url, c.name AS activity_category,
+              m.completed_at,
+              EXTRACT(DAY FROM NOW() - m.completed_at)::int AS days_ago
+       FROM memories m
+       JOIN activities a ON a.id = m.activity_id
+       JOIN categories c ON c.id = a.category_id
+       WHERE m.couple_id = $1
+         AND m.completed_at < NOW() - INTERVAL '30 days'
+         AND m.activity_id IS NOT NULL
+         AND m.repeat_requested_by IS NULL
+         AND m.nudge_response_a IS NULL
+         AND m.nudge_response_b IS NULL
+         AND (m.last_nudged_at IS NULL OR m.last_nudged_at < NOW() - INTERVAL '180 days')
+         AND (
+           (m.rating_a >= 4 AND m.rating_b >= 4)
+           OR (m.rating_a IS NULL AND m.rating_b IS NULL)
+         )
+       ORDER BY RANDOM()
+       LIMIT 1`,
+      [coupleId]
+    );
+    const newNextNudge = userSwipeCount + 12 + Math.floor(Math.random() * 6);
+    await pool.query(
+      'UPDATE users SET next_nudge_at_swipe = $1 WHERE id = $2',
+      [newNextNudge, req.user.id]
+    );
+    if (eligible.rows.length > 0) {
+      return res.json({ nudge: eligible.rows[0] });
+    }
+  } else if (nudgeRow.rows[0].next_nudge_at_swipe === null) {
+    await pool.query(
+      'UPDATE users SET next_nudge_at_swipe = $1 WHERE id = $2',
+      [nextNudgeAt, req.user.id]
+    );
+  }
+
   const activities = await pool.query(
     `SELECT a.*, c.name as category_name
      FROM activities a
@@ -1022,6 +1101,72 @@ app.post('/memories/:id/accept-repeat', auth, async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// Swipe on a memory nudge. Separate from /activities/:id/swipe because the
+// underlying activity already has a swipe row from the original cycle —
+// nudge state lives on the memories row instead. Both 'yes' → checklist
+// entry, either 'no' → 180d cooldown.
+app.post('/memories/:id/nudge-swipe', auth, async (req, res) => {
+  const memoryId = req.params.id;
+  const liked = !!req.body.liked;
+  const couple = await pool.query(
+    'SELECT id, user_a_id, user_b_id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE AND user_b_id IS NOT NULL',
+    [req.user.id]
+  );
+  if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
+  const c = couple.rows[0];
+  const isA = c.user_a_id === req.user.id;
+  const myCol = isA ? 'a' : 'b';
+
+  const memory = await pool.query(
+    'SELECT * FROM memories WHERE id = $1 AND couple_id = $2',
+    [memoryId, c.id]
+  );
+  if (memory.rows.length === 0) return res.status(404).json({ error: 'Memory not found' });
+  const m = memory.rows[0];
+
+  // Stale swipe: cycle already resolved (cooldown active). Ignore.
+  if (m.last_nudged_at && (Date.now() - new Date(m.last_nudged_at).getTime() < 180 * 86400 * 1000)) {
+    return res.json({ match: false, stale: true });
+  }
+  // Already responded
+  if ((isA && m.nudge_response_a !== null) || (!isA && m.nudge_response_b !== null)) {
+    return res.json({ match: false, already: true });
+  }
+
+  await pool.query(
+    `UPDATE memories SET nudge_response_${myCol} = $1, updated_at = NOW() WHERE id = $2`,
+    [liked, memoryId]
+  );
+
+  if (!liked) {
+    await pool.query(
+      'UPDATE memories SET last_nudged_at = NOW(), nudge_response_a = NULL, nudge_response_b = NULL WHERE id = $1',
+      [memoryId]
+    );
+    return res.json({ match: false });
+  }
+
+  const partnerResp = isA ? m.nudge_response_b : m.nudge_response_a;
+  if (partnerResp === true) {
+    await pool.query(
+      'INSERT INTO checklist (couple_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [c.id, m.activity_id]
+    );
+    await pool.query(
+      'UPDATE memories SET last_nudged_at = NOW(), nudge_response_a = NULL, nudge_response_b = NULL WHERE id = $1',
+      [memoryId]
+    );
+    const partnerId = isA ? c.user_b_id : c.user_a_id;
+    sendPush(pool, partnerId, 'You both want it again!',
+      `${m.activity_title} is back on the list`,
+      { route: '/checklist' }
+    ).catch(e => console.error('[push] nudge match', e.message));
+    return res.json({ match: true, message: 'Bringing it back!' });
+  }
+
+  res.json({ match: false });
 });
 
 // Comments: shared with helper. parentType is 'plan' (checklist) or 'memory'.
