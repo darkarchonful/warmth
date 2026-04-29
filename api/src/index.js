@@ -541,12 +541,22 @@ app.get('/activities/next', auth, async (req, res) => {
     );
   }
 
+  // Exclude cards that are: liked (already matched/in flight), already
+  // re-shown once (no third chance), or skipped within the last 30 days
+  // (cooldown). Skipped >30d ago with re_show_count = 0 falls through and
+  // gets re-surfaced.
   const activities = await pool.query(
     `SELECT a.*, c.name as category_name
      FROM activities a
      JOIN categories c ON c.id = a.category_id
      WHERE a.id NOT IN (
-       SELECT activity_id FROM swipes WHERE user_id = $1 AND couple_id = $2
+       SELECT activity_id FROM swipes
+       WHERE user_id = $1 AND couple_id = $2
+         AND (
+           liked = TRUE
+           OR re_show_count >= 1
+           OR swiped_at > NOW() - INTERVAL '30 days'
+         )
      )
      AND a.parent_activity_id IS NULL
      AND ($3 = ANY(a.seasons) OR 'all' = ANY(a.seasons))
@@ -622,8 +632,17 @@ app.post('/activities/:id/swipe', auth, async (req, res) => {
   }
   const c = couple.rows[0];
 
+  // First swipe: plain insert. Re-swipe (after a 30d-old skip): update the
+  // existing row, bump re_show_count so we never resurface it again. The
+  // WHERE on the upsert restricts the update to that one case so an
+  // already-liked or already-re-shown row stays untouched.
   await pool.query(
-    'INSERT INTO swipes (user_id, couple_id, activity_id, liked) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+    `INSERT INTO swipes (user_id, couple_id, activity_id, liked) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (user_id, couple_id, activity_id) DO UPDATE SET
+       liked = EXCLUDED.liked,
+       swiped_at = NOW(),
+       re_show_count = swipes.re_show_count + 1
+     WHERE swipes.liked = FALSE AND swipes.re_show_count = 0`,
     [req.user.id, c.id, activityId, liked]
   );
 
