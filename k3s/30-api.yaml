@@ -24,7 +24,7 @@ spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway
+          whenUnsatisfiable: DoNotSchedule
           labelSelector:
             matchLabels:
               app: warmth-api
@@ -40,13 +40,13 @@ spec:
             - postgres-warmth
       containers:
         - name: api
-          image: ghcr.io/darkarchonful/warmth-api:v8
+          image: ghcr.io/darkarchonful/warmth-api:v9
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
             - name: APP_VERSION
-              value: "v8"
+              value: "v9"
             # TODO: remove before public launch — testing bypass for daily cap
             - name: DISABLE_SWIPE_LIMIT
               value: "1"
