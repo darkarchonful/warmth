@@ -30,14 +30,15 @@ spec:
               app: warmth-api
       imagePullSecrets:
         - name: ghcr-pull
-      # Pin postgres-warmth to its stable StatefulSet pod IP so we don't
-      # depend on cluster DNS (CoreDNS endpoints include a remote replica
-      # on the tw1.ru control-plane; lookups that hit it across the WAN
-      # overlay can time out under load, crashing the API pod).
+      # Pin postgres-warmth-svc to its Service ClusterIP so we bypass
+      # cluster DNS (CoreDNS endpoints include a remote replica on the
+      # tw1.ru control-plane; lookups that hit it across the WAN overlay
+      # can time out under load). The ClusterIP is stable across pod
+      # reschedules — kube-proxy handles the routing.
       hostAliases:
-        - ip: 10.42.2.39
+        - ip: 10.43.5.36
           hostnames:
-            - postgres-warmth
+            - postgres-warmth-svc
       containers:
         - name: api
           image: ghcr.io/darkarchonful/warmth-api:v9
@@ -56,7 +57,7 @@ spec:
                   name: warmth-secrets
                   key: postgres-password
             - name: DATABASE_URL
-              value: postgres://warmth:$(POSTGRES_PASSWORD)@postgres-warmth:5432/warmth
+              value: postgres://warmth:$(POSTGRES_PASSWORD)@postgres-warmth-svc:5432/warmth
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
