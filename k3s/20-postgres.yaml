@@ -11,6 +11,19 @@ spec:
     - port: 5432
       name: postgres
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-warmth-svc
+  namespace: warmth
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres-warmth
+  ports:
+    - port: 5432
+      name: postgres
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
