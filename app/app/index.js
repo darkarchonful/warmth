@@ -193,7 +193,7 @@ export default function Home() {
             style={{ position: 'absolute', top: 50, right: 20 }}
             onPress={async () => { await clearToken(); setUser(null); setCouple(null); setMyInvite(''); }}
           >
-            <Text style={{ color: colors.textLight, fontSize: 14 }}>Logout</Text>
+            <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '500' }}>Logout</Text>
           </TouchableOpacity>
 
           {myInvite ? (
