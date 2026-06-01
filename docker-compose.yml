@@ -26,6 +26,7 @@ services:
       DATABASE_URL: postgres://warmth:warmth_dev_2026@db:5432/warmth
       PORT: 3000
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID}
       DAILY_SWIPE_LIMIT: ${DAILY_SWIPE_LIMIT:-8}
       DISABLE_SWIPE_LIMIT: ${DISABLE_SWIPE_LIMIT:-1}
       JWT_SECRET: ${JWT_SECRET:-warmth_jwt_dev_secret_2026}

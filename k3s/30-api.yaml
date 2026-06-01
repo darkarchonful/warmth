@@ -41,13 +41,13 @@ spec:
             - postgres-warmth-svc
       containers:
         - name: api
-          image: ghcr.io/darkarchonful/warmth-api:v9
+          image: ghcr.io/darkarchonful/warmth-api:v10
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
             - name: APP_VERSION
-              value: "v9"
+              value: "v10"
             # TODO: remove before public launch — testing bypass for daily cap
             - name: DISABLE_SWIPE_LIMIT
               value: "1"
@@ -68,6 +68,11 @@ spec:
                 secretKeyRef:
                   name: warmth-secrets
                   key: google-client-id
+            - name: GOOGLE_IOS_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: warmth-secrets
+                  key: google-ios-client-id
           ports:
             - containerPort: 3000
           resources:
