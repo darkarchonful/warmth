@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, KeyboardAvoidingView, Platform, ScrollView, Keyboard, TouchableWithoutFeedback, Share } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Google from 'expo-auth-session/providers/google';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import { colors } from '../lib/colors';
 import { api, API_URL, loadToken, saveToken, clearToken } from '../lib/api';
@@ -91,6 +92,29 @@ export default function Home() {
     setLoading(false);
   }
 
+  async function signInWithApple() {
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      // fullName is only populated on the very first sign-in.
+      const data = await api.authApple(credential.identityToken, credential.fullName);
+      await saveToken(data.token);
+      const me = await api.me();
+      setUser(me.user);
+      setCouple(me.couple);
+      setError('');
+      registerForPush();
+      if (me.couple?.paired_at) router.replace('/swipe');
+    } catch (e) {
+      if (e.code === 'ERR_REQUEST_CANCELED') return; // user dismissed the sheet
+      setError('Apple sign-in failed: ' + e.message);
+    }
+  }
+
   // Dev login (skip Google for now)
   async function devLogin(name, email) {
     setError('Logging in...');
@@ -154,6 +178,16 @@ export default function Home() {
         >
           <Text style={styles.googleButtonText}>Continue with Google</Text>
         </TouchableOpacity>
+
+        {Platform.OS === 'ios' && (
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            cornerRadius={25}
+            style={styles.appleButton}
+            onPress={signInWithApple}
+          />
+        )}
 
         <View style={styles.devBox}>
           <Text style={styles.devLabel}>Dev Login</Text>
@@ -363,5 +397,10 @@ const styles = StyleSheet.create({
     color: '#444',
     fontSize: 16,
     fontWeight: '500',
+  },
+  appleButton: {
+    width: 260,
+    height: 48,
+    marginBottom: 20,
   },
 });

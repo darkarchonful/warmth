@@ -43,6 +43,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ idToken }),
   }),
+  authApple: (identityToken, fullName) => request('/auth/apple', {
+    method: 'POST',
+    body: JSON.stringify({ identityToken, fullName }),
+  }),
 
   // User
   me: () => request('/me'),
