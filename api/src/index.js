@@ -14,6 +14,13 @@ app.use('/images/activities', express.static(path.join(__dirname, '..', 'public'
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+// Accept ID tokens issued for any of our Google OAuth clients. iOS sign-in
+// returns a token whose `aud` is the iOS client ID, web returns the web client
+// ID — both must be allowed or verification fails with an audience mismatch.
+const GOOGLE_AUDIENCES = [
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_IOS_CLIENT_ID,
+].filter(Boolean);
 const JWT_SECRET = process.env.JWT_SECRET;
 
 const INVITE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
@@ -43,7 +50,7 @@ app.post('/auth/google', async (req, res) => {
     const { idToken } = req.body;
     const ticket = await googleClient.verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: GOOGLE_AUDIENCES,
     });
     const { sub: googleId, email, name, picture } = ticket.getPayload();
 
