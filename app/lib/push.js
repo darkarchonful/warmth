@@ -4,17 +4,26 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { api } from './api';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+// Lazily set the handler the first time we register, instead of at module
+// import (which runs at launch). Avoids touching the notifications native
+// module during app startup.
+let handlerSet = false;
+function ensureHandler() {
+  if (handlerSet) return;
+  handlerSet = true;
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 export async function registerForPush() {
   if (!Device.isDevice) return;
+  ensureHandler();
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
