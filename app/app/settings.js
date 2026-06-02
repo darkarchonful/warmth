@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import * as Application from 'expo-application';
 import { api, clearToken } from '../lib/api';
 import { colors } from '../lib/colors';
+import Paywall from '../components/Paywall';
 
 export default function Settings() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [confirm, setConfirm] = useState(null);
   const [working, setWorking] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   useEffect(() => {
     api.me()
@@ -28,6 +30,31 @@ export default function Settings() {
 
   const partnerName = me?.couple?.partner_name;
   const isPaired = !!(me?.couple && me.couple.user_b_id);
+  const premium = !!me?.couple?.premium;
+  const premiumExpires = me?.couple?.premium_expires_at;
+  const memoriesCount = me?.couple?.memories_count ?? 0;
+  const freeLimit = me?.couple?.free_memory_limit ?? 3;
+
+  async function reloadMe() {
+    try { setMe(await api.me()); } catch {}
+  }
+
+  async function handleRestore() {
+    setWorking(true);
+    try {
+      const r = await api.restorePremium();
+      if (r.premium) { await reloadMe(); Alert.alert('Restored', 'Premium is active for your couple.'); }
+      else Alert.alert('Nothing to restore', 'No active subscription found for your couple.');
+    } catch (e) { Alert.alert('Error', e.message); }
+    finally { setWorking(false); }
+  }
+
+  async function handleMockCancel() {
+    setWorking(true);
+    try { await api.mockCancelPremium(); await reloadMe(); }
+    catch (e) { Alert.alert('Error', e.message); }
+    finally { setWorking(false); }
+  }
 
   async function handleUnpair() {
     setWorking(true);
@@ -55,6 +82,15 @@ export default function Settings() {
       Alert.alert('Error', e.message);
       setWorking(false);
     }
+  }
+
+  if (showPaywall) {
+    return (
+      <Paywall
+        onClose={() => setShowPaywall(false)}
+        onSubscribed={async () => { setShowPaywall(false); await reloadMe(); }}
+      />
+    );
   }
 
   return (
@@ -97,6 +133,40 @@ export default function Settings() {
               <Row value="Not paired" last />
             )}
           </View>
+
+          {isPaired && (
+            <>
+              <Text style={styles.sectionLabel}>Premium</Text>
+              <View style={styles.card}>
+                {premium ? (
+                  <>
+                    <Row label="Status" value="Active 💛" />
+                    {premiumExpires && (
+                      <Row label="Renews" value={new Date(premiumExpires).toLocaleDateString()} />
+                    )}
+                    <Action
+                      label="Cancel (test)"
+                      sub="Mock — drops your couple back to free for testing"
+                      onPress={handleMockCancel}
+                      disabled={working}
+                      last
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Row label="Memories" value={`${memoriesCount} / ${freeLimit} free`} />
+                    <Action
+                      label="Go Premium"
+                      sub="Unlimited plans & memories — unlocks for both of you"
+                      onPress={() => setShowPaywall(true)}
+                      disabled={working}
+                    />
+                    <Action label="Restore purchase" onPress={handleRestore} disabled={working} last />
+                  </>
+                )}
+              </View>
+            </>
+          )}
 
           <Text style={styles.sectionLabel}>Account actions</Text>
           <View style={styles.card}>

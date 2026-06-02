@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Alert } 
 import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api } from '../../lib/api';
+import Paywall from '../../components/Paywall';
 
 export default function Checklist() {
   const router = useRouter();
@@ -12,6 +13,7 @@ export default function Checklist() {
   const [customTitle, setCustomTitle] = useState('');
   const [customTagline, setCustomTagline] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   useEffect(() => {
     load();
@@ -33,8 +35,13 @@ export default function Checklist() {
   }
 
   async function handleComplete(id) {
-    await api.complete(id);
-    load();
+    try {
+      await api.complete(id);
+      load();
+    } catch (e) {
+      if (e.premiumRequired) { setShowPaywall(true); return; }
+      Alert.alert('Could not complete', e.message);
+    }
   }
 
   function openAdder(parentId) {
@@ -206,6 +213,15 @@ export default function Checklist() {
           </View>
         )}
       </TouchableOpacity>
+    );
+  }
+
+  if (showPaywall) {
+    return (
+      <Paywall
+        onClose={() => setShowPaywall(false)}
+        onSubscribed={() => { setShowPaywall(false); load(); }}
+      />
     );
   }
 

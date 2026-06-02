@@ -33,7 +33,12 @@ async function request(path, options = {}) {
   const text = await res.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { error: `HTTP ${res.status}` }; }
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const err = new Error(data.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    err.premiumRequired = !!data.premium_required;
+    throw err;
+  }
   return data;
 }
 
@@ -107,6 +112,15 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ token, platform }),
   }),
+
+  // Premium (couple-level). Real IAP replaces mockSubscribe at launch.
+  premiumStatus: () => request('/premium/status'),
+  mockSubscribe: (plan) => request('/premium/mock-subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ plan }),
+  }),
+  mockCancelPremium: () => request('/premium/mock-cancel', { method: 'POST' }),
+  restorePremium: () => request('/premium/restore', { method: 'POST' }),
 
   // Health (includes backend version)
   health: () => request('/health'),

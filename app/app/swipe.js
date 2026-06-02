@@ -4,6 +4,7 @@ import { PinchGestureHandler, PanGestureHandler, State } from 'react-native-gest
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../lib/colors';
 import { api, API_URL } from '../lib/api';
+import Paywall from '../components/Paywall';
 
 function resolveImage(url) {
   if (!url) return null;
@@ -53,6 +54,7 @@ export default function Swipe() {
   const [activity, setActivity] = useState(null);
   const [blocked, setBlocked] = useState(false);
   const [blockMessage, setBlockMessage] = useState('');
+  const [premiumRequired, setPremiumRequired] = useState(false);
   const [previewImages, setPreviewImages] = useState([]);
   const [matchPopup, setMatchPopup] = useState(null);
   const [done, setDone] = useState(false);
@@ -145,6 +147,10 @@ export default function Swipe() {
         return;
       }
       if (data.blocked) {
+        if (data.premium_required) {
+          setPremiumRequired(true);
+          return;
+        }
         setBlocked(true);
         setBlockMessage(data.message);
         setPreviewImages(data.preview_images || []);
@@ -350,6 +356,17 @@ export default function Swipe() {
     outputRange: [1, 0],
     extrapolate: 'clamp',
   });
+
+  if (premiumRequired) {
+    return (
+      <Paywall
+        onSubscribed={() => {
+          setPremiumRequired(false);
+          refillQueue({ setFirst: true });
+        }}
+      />
+    );
+  }
 
   if (blocked) {
     const isComeBack = previewImages.length > 0;
