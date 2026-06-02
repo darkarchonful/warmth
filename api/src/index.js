@@ -26,6 +26,22 @@ const GOOGLE_AUDIENCES = [
 const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID;
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// Premium: free tier allows this many completed memories; the next one needs
+// a subscription. Entitlement lives on the couple — either partner unlocks both.
+const FREE_MEMORY_LIMIT = 3;
+
+function isCouplePremium(couple) {
+  if (!couple || !couple.is_premium) return false;
+  // NULL expiry = lifetime; otherwise must still be in the future.
+  if (couple.premium_expires_at && new Date(couple.premium_expires_at) <= new Date()) return false;
+  return true;
+}
+
+async function coupleMemoryCount(coupleId) {
+  const r = await pool.query('SELECT COUNT(*)::int AS n FROM memories WHERE couple_id = $1', [coupleId]);
+  return r.rows[0].n;
+}
+
 const INVITE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 function generateInviteCode() {
   let code = '';
@@ -164,8 +180,82 @@ app.get('/me', auth, async (req, res) => {
     ]);
     unreadCount = a.rows[0].n;
     unreadMemories = b.rows[0].n;
+    // Computed premium status for the client: entitlement + free-tier progress.
+    couple.rows[0].premium = isCouplePremium(couple.rows[0]);
+    couple.rows[0].memories_count = await coupleMemoryCount(cid);
+    couple.rows[0].free_memory_limit = FREE_MEMORY_LIMIT;
   }
   res.json({ user: user.rows[0], couple: couple.rows[0] || null, unreadCount, unreadMemories });
+});
+
+// --- Premium (couple-level entitlement) ---
+
+async function activeCoupleId(userId) {
+  const r = await pool.query(
+    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE LIMIT 1',
+    [userId]
+  );
+  return r.rows[0]?.id ?? null;
+}
+
+app.get('/premium/status', auth, async (req, res) => {
+  const cid = await activeCoupleId(req.user.id);
+  if (!cid) return res.status(400).json({ error: 'Not in a couple' });
+  const c = (await pool.query(
+    'SELECT is_premium, premium_since, premium_expires_at, premium_product FROM couples WHERE id = $1',
+    [cid]
+  )).rows[0];
+  res.json({
+    premium: isCouplePremium(c),
+    product: c.premium_product,
+    since: c.premium_since,
+    expires_at: c.premium_expires_at,
+    memories_count: await coupleMemoryCount(cid),
+    free_memory_limit: FREE_MEMORY_LIMIT,
+  });
+});
+
+// Mock subscribe — DEV/test only. The rented account has no Paid Apps
+// Agreement, so real IAP isn't possible there; this flips the couple to
+// premium so the full gate/paywall/unlock flow is testable. Real StoreKit
+// receipt validation replaces this at the Armenia launch.
+app.post('/premium/mock-subscribe', auth, async (req, res) => {
+  const plan = req.body?.plan === 'yearly' ? 'yearly' : 'monthly';
+  const cid = await activeCoupleId(req.user.id);
+  if (!cid) return res.status(400).json({ error: 'Not in a couple' });
+  const months = plan === 'yearly' ? 12 : 1;
+  const r = await pool.query(
+    `UPDATE couples
+       SET is_premium = TRUE,
+           premium_since = COALESCE(premium_since, NOW()),
+           premium_expires_at = NOW() + make_interval(months => $2),
+           premium_product = $3,
+           premium_purchaser_user_id = $1
+     WHERE id = $4
+     RETURNING is_premium, premium_since, premium_expires_at, premium_product`,
+    [req.user.id, months, 'mock_' + plan, cid]
+  );
+  res.json({ premium: true, ...r.rows[0] });
+});
+
+// Mock cancel — testing helper to drop the couple back to free.
+app.post('/premium/mock-cancel', auth, async (req, res) => {
+  const cid = await activeCoupleId(req.user.id);
+  if (!cid) return res.status(400).json({ error: 'Not in a couple' });
+  await pool.query(
+    'UPDATE couples SET is_premium = FALSE, premium_expires_at = NULL, premium_product = NULL WHERE id = $1',
+    [cid]
+  );
+  res.json({ premium: false });
+});
+
+// Restore — server-side entitlement lives on the couple, so restore just
+// re-reports current status. Real IAP restore re-validates store receipts.
+app.post('/premium/restore', auth, async (req, res) => {
+  const cid = await activeCoupleId(req.user.id);
+  if (!cid) return res.status(400).json({ error: 'Not in a couple' });
+  const c = (await pool.query('SELECT is_premium, premium_expires_at FROM couples WHERE id = $1', [cid])).rows[0];
+  res.json({ premium: isCouplePremium(c) });
 });
 
 // Delete account: wipes the user and any couple they belong to (with all
@@ -393,13 +483,23 @@ function currentSeason(month) {
 // Get next activity to swipe
 app.get('/activities/next', auth, async (req, res) => {
   const couple = await pool.query(
-    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE AND user_b_id IS NOT NULL',
+    'SELECT id, is_premium, premium_expires_at FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE AND user_b_id IS NOT NULL',
     [req.user.id]
   );
   if (couple.rows.length === 0) {
     return res.status(400).json({ error: 'Not in a couple' });
   }
   const coupleId = couple.rows[0].id;
+
+  // Premium gate: after FREE_MEMORY_LIMIT completed memories, stop showing new
+  // cards until the couple subscribes (either partner). They keep their memories.
+  if (!isCouplePremium(couple.rows[0]) && (await coupleMemoryCount(coupleId)) >= FREE_MEMORY_LIMIT) {
+    return res.json({
+      blocked: true,
+      premium_required: true,
+      message: 'You\'ve made 3 memories together — go Premium to keep going',
+    });
+  }
 
   // Check action gate: max 3 undone items in checklist
   const pending = await pool.query(
@@ -889,12 +989,22 @@ app.post('/checklist/:id/custom-substep', auth, async (req, res) => {
 // Complete checklist item
 app.post('/checklist/:id/complete', auth, async (req, res) => {
   const couple = await pool.query(
-    'SELECT id, user_a_id, user_b_id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    'SELECT id, user_a_id, user_b_id, is_premium, premium_expires_at FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
     [req.user.id]
   );
   if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
 
   const c = couple.rows[0];
+
+  // Premium gate: block completing a plan once the couple has hit the free
+  // memory limit (a completion would create memory #4). Either partner subscribing unlocks both.
+  if (!isCouplePremium(c) && (await coupleMemoryCount(c.id)) >= FREE_MEMORY_LIMIT) {
+    return res.status(402).json({
+      error: 'Premium required',
+      premium_required: true,
+      message: 'You\'ve made 3 memories together — go Premium to complete more',
+    });
+  }
   const isA = c.user_a_id === req.user.id;
   const field = isA ? 'completed_by_a' : 'completed_by_b';
 
