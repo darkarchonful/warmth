@@ -41,13 +41,15 @@ spec:
             - postgres-warmth-svc
       containers:
         - name: api
-          image: ghcr.io/darkarchonful/warmth-api:v10
+          image: ghcr.io/darkarchonful/warmth-api:v11
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
             - name: APP_VERSION
-              value: "v10"
+              value: "v11"
+            - name: APPLE_BUNDLE_ID
+              value: "com.dbtvault.warmth"
             # TODO: remove before public launch — testing bypass for daily cap
             - name: DISABLE_SWIPE_LIMIT
               value: "1"

@@ -4,6 +4,7 @@ const path = require('path');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
+const appleSignin = require('apple-signin-auth');
 const crypto = require('crypto');
 const { sendPush } = require('./push');
 
@@ -21,6 +22,8 @@ const GOOGLE_AUDIENCES = [
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_IOS_CLIENT_ID,
 ].filter(Boolean);
+// Sign in with Apple: the identity token's `aud` is the app's bundle ID.
+const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID;
 const JWT_SECRET = process.env.JWT_SECRET;
 
 const INVITE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
@@ -60,6 +63,43 @@ app.post('/auth/google', async (req, res) => {
        ON CONFLICT (google_id) DO UPDATE SET name = $3, avatar_url = $4
        RETURNING id, email, name, avatar_url`,
       [googleId, email, name, picture]
+    );
+
+    const user = result.rows[0];
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, user });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Sign in with Apple. The app sends Apple's identityToken (a JWT signed by
+// Apple) plus, ONLY on the very first sign-in, the user's name — Apple never
+// returns the name again, and the token itself never carries it. We key on the
+// stable Apple `sub`; email comes from the verified token.
+app.post('/auth/apple', async (req, res) => {
+  try {
+    const { identityToken, fullName } = req.body;
+    if (!identityToken) return res.status(400).json({ error: 'Missing identityToken' });
+
+    const payload = await appleSignin.verifyIdToken(identityToken, {
+      audience: APPLE_BUNDLE_ID,
+      ignoreExpiration: false,
+    });
+    const appleId = payload.sub;
+    const email = payload.email || null;
+    // fullName is { givenName, familyName } on first sign-in only.
+    const name =
+      [fullName?.givenName, fullName?.familyName].filter(Boolean).join(' ').trim() ||
+      (email ? email.split('@')[0] : 'Friend');
+
+    const result = await pool.query(
+      `INSERT INTO users (apple_id, email, name)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (apple_id) DO UPDATE
+         SET email = COALESCE(users.email, EXCLUDED.email)
+       RETURNING id, email, name, avatar_url`,
+      [appleId, email, name]
     );
 
     const user = result.rows[0];
