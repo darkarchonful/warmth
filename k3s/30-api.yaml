@@ -39,6 +39,15 @@ spec:
         - ip: 10.43.5.36
           hostnames:
             - postgres-warmth-svc
+      # Outbound name resolution (Google/Apple key servers for token
+      # verification, Expo push) also goes through the flaky CoreDNS path and
+      # intermittently fails with EAI_AGAIN — half of social logins failed when
+      # they landed on a pod whose CoreDNS lookup timed out. Add public
+      # resolvers as fallback (ClusterFirst keeps CoreDNS first for in-cluster).
+      dnsConfig:
+        nameservers:
+          - 1.1.1.1
+          - 8.8.8.8
       containers:
         - name: api
           image: ghcr.io/darkarchonful/warmth-api:v11
