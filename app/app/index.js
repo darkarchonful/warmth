@@ -14,6 +14,7 @@ WebBrowser.maybeCompleteAuthSession();
 export default function Home() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [connError, setConnError] = useState(false);
   const [user, setUser] = useState(null);
   const [couple, setCouple] = useState(null);
   const [inviteCode, setInviteCode] = useState('');
@@ -72,6 +73,25 @@ export default function Home() {
     return () => clearInterval(id);
   }, [myInvite]);
 
+  // Load /me, retrying transient failures. Only a 401 means the token is
+  // actually invalid — anything else (no connectivity, a 5xx, a timeout) is a
+  // temporary hiccup and must NOT be treated as "logged out".
+  async function loadMe(retries = 2) {
+    let lastErr;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await api.me();
+      } catch (e) {
+        lastErr = e;
+        if (e.status === 401) throw e; // genuine — don't retry, don't keep session
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+        }
+      }
+    }
+    throw lastErr;
+  }
+
   async function init() {
     const token = await loadToken();
     if (!token) {
@@ -79,17 +99,31 @@ export default function Home() {
       return;
     }
     try {
-      const data = await api.me();
+      const data = await loadMe();
+      setConnError(false);
       setUser(data.user);
       setCouple(data.couple);
       registerForPush();
       if (data.couple?.paired_at) {
         router.replace('/swipe');
       }
-    } catch {
-      // token expired
+    } catch (e) {
+      if (e.status === 401) {
+        // Token really is expired/invalid — clear it so the login screen shows.
+        await clearToken();
+      } else {
+        // Couldn't reach the backend. Keep the token; offer a retry instead of
+        // silently dropping the user to the login screen.
+        setConnError(true);
+      }
     }
     setLoading(false);
+  }
+
+  function retryInit() {
+    setConnError(false);
+    setLoading(true);
+    init();
   }
 
   async function signInWithApple() {
@@ -159,6 +193,20 @@ export default function Home() {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Warmth</Text>
+      </View>
+    );
+  }
+
+  // Token is valid but we couldn't reach the backend — don't log the user out,
+  // let them retry.
+  if (connError) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Warmth</Text>
+        <Text style={styles.subtitle}>Couldn't connect — check your connection</Text>
+        <TouchableOpacity style={[styles.button, { marginTop: 20 }]} onPress={retryInit}>
+          <Text style={styles.buttonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
