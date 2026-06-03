@@ -10,11 +10,13 @@
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
       "ios": {
         "simulator": false
       }
     },
     "production": {
+      "channel": "production",
       "ios": {
         "autoIncrement": true
       },
