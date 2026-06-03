@@ -63,6 +63,83 @@ function auth(req, res, next) {
   }
 }
 
+// Find-or-create a user from a verified social identity, linking accounts by
+// verified email. Order of resolution:
+//   1. A row already owns this provider id  -> use it (refresh name/avatar/email).
+//   2. No provider-id match, but a row owns this verified email -> attach the
+//      new provider id to that row (e.g. signed up with Google, now Apple).
+//   3. Neither -> create a fresh user.
+// Both Google and Apple verify email ownership, so an email match is the same
+// human; linking is safe. (Apple "Hide My Email" relay addresses simply won't
+// match a real Google email, so those land as separate accounts — unavoidable.)
+// Runs in a transaction with a row lock on the email so two concurrent first
+// sign-ins (one per provider) can't both insert.
+async function upsertProviderUser({ provider, providerId, email, name, avatarUrl }) {
+  const idCol = provider === 'apple' ? 'apple_id' : 'google_id';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Existing row for this provider id.
+    const byId = await client.query(
+      `SELECT id, email, name, avatar_url FROM users WHERE ${idCol} = $1 FOR UPDATE`,
+      [providerId]
+    );
+    if (byId.rows[0]) {
+      // Refresh email if we never had one (Apple omits it after first sign-in);
+      // refresh avatar from Google. Keep the existing name.
+      const u = byId.rows[0];
+      const updated = await client.query(
+        `UPDATE users
+            SET email = COALESCE(email, $2),
+                avatar_url = COALESCE($3, avatar_url)
+          WHERE id = $1
+          RETURNING id, email, name, avatar_url`,
+        [u.id, email, avatarUrl || null]
+      );
+      await client.query('COMMIT');
+      return updated.rows[0];
+    }
+
+    // 2. No provider-id match — link by verified email if one exists.
+    if (email) {
+      const byEmail = await client.query(
+        'SELECT id, email, name, avatar_url FROM users WHERE email = $1 FOR UPDATE',
+        [email]
+      );
+      if (byEmail.rows[0]) {
+        const u = byEmail.rows[0];
+        const linked = await client.query(
+          `UPDATE users
+              SET ${idCol} = $2,
+                  name = COALESCE(name, $3),
+                  avatar_url = COALESCE(avatar_url, $4)
+            WHERE id = $1
+            RETURNING id, email, name, avatar_url`,
+          [u.id, providerId, name, avatarUrl || null]
+        );
+        await client.query('COMMIT');
+        return linked.rows[0];
+      }
+    }
+
+    // 3. Brand-new user.
+    const created = await client.query(
+      `INSERT INTO users (${idCol}, email, name, avatar_url)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, email, name, avatar_url`,
+      [providerId, email, name, avatarUrl || null]
+    );
+    await client.query('COMMIT');
+    return created.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // Google Sign-In
 app.post('/auth/google', async (req, res) => {
   try {
@@ -73,15 +150,14 @@ app.post('/auth/google', async (req, res) => {
     });
     const { sub: googleId, email, name, picture } = ticket.getPayload();
 
-    const result = await pool.query(
-      `INSERT INTO users (google_id, email, name, avatar_url)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (google_id) DO UPDATE SET name = $3, avatar_url = $4
-       RETURNING id, email, name, avatar_url`,
-      [googleId, email, name, picture]
-    );
+    const user = await upsertProviderUser({
+      provider: 'google',
+      providerId: googleId,
+      email,
+      name,
+      avatarUrl: picture,
+    });
 
-    const user = result.rows[0];
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
     res.json({ token, user });
   } catch (err) {
@@ -109,16 +185,12 @@ app.post('/auth/apple', async (req, res) => {
       [fullName?.givenName, fullName?.familyName].filter(Boolean).join(' ').trim() ||
       (email ? email.split('@')[0] : 'Friend');
 
-    const result = await pool.query(
-      `INSERT INTO users (apple_id, email, name)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (apple_id) DO UPDATE
-         SET email = COALESCE(users.email, EXCLUDED.email)
-       RETURNING id, email, name, avatar_url`,
-      [appleId, email, name]
-    );
-
-    const user = result.rows[0];
+    const user = await upsertProviderUser({
+      provider: 'apple',
+      providerId: appleId,
+      email,
+      name,
+    });
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
     res.json({ token, user });
   } catch (err) {
