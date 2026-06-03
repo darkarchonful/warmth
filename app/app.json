@@ -21,7 +21,7 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.dbtvault.warmth",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
