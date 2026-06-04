@@ -40,7 +40,16 @@ async function request(path, options = {}) {
   const text = await res.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { error: `HTTP ${res.status}` }; }
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    // Attach the HTTP status so callers can distinguish a genuine 401 (token
+    // invalid -> log out) from a transient network/5xx error (-> retry). Without
+    // this, init()/loadMe treat every failure — including a clean 401 — as a
+    // connection error and show "Couldn't connect" instead of the login screen.
+    const err = new Error(data.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    err.premiumRequired = !!data.premium_required;
+    throw err;
+  }
   return data;
 }
 
