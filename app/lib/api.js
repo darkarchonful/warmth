@@ -6,6 +6,14 @@ export const API_URL =
 
 let token = null;
 
+// Latest known OS notification-permission status, set by registerForPush().
+// Sent on requests as X-Notif-Permission so the server can record who's
+// reachable by push (persisted only on /me). Null until first read.
+let notifPermission = null;
+export function setNotifPermission(status) {
+  notifPermission = status;
+}
+
 export async function loadToken() {
   token = await SecureStore.getItemAsync('token');
   return token;
@@ -31,6 +39,7 @@ async function request(path, options = {}) {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (tz) headers['X-Timezone'] = tz;
   } catch {}
+  if (notifPermission) headers['X-Notif-Permission'] = notifPermission;
 
   const res = await fetch(`${API_URL}${path}`, {
     ...options,

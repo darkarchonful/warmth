@@ -66,6 +66,39 @@ function captureTimezone(req) {
     .catch((e) => console.error('[tz] update failed', e.message));
 }
 
+// Opportunistically persist the client's OS notification-permission status
+// from the X-Notif-Permission header (same pattern as captureTimezone).
+// Telemetry only — lets us see who's reachable by push and distinguish a real
+// denial from "never prompted". Fire-and-forget; only writes on change.
+const NOTIF_PERMS = new Set(['granted', 'denied', 'undetermined']);
+function captureNotifPermission(req) {
+  const p = req.headers['x-notif-permission'];
+  if (!p || typeof p !== 'string' || !NOTIF_PERMS.has(p)) return;
+  pool
+    .query(
+      `UPDATE users SET notif_permission = $1, notif_permission_at = now()
+       WHERE id = $2 AND notif_permission IS DISTINCT FROM $1`,
+      [p, req.user.id]
+    )
+    .catch((e) => console.error('[notif-perm] update failed', e.message));
+}
+
+// Fire-and-forget user-event push to the partner. Looks up the acting user's
+// display name first so messages can read "Alice added a new idea". Never
+// blocks the response; errors are logged, not surfaced. `build(name)` returns
+// { title, body }. Skips silently if partnerId is null (no partner yet).
+function notifyPartner(partnerId, actorId, build, data = {}) {
+  if (!partnerId) return;
+  pool
+    .query('SELECT name FROM users WHERE id = $1', [actorId])
+    .then(({ rows }) => {
+      const name = rows[0]?.name || 'Your partner';
+      const { title, body } = build(name);
+      return sendPush(pool, partnerId, title, body, data);
+    })
+    .catch((e) => console.error('[push] notifyPartner', e.message));
+}
+
 // Find-or-create a user from a verified social identity, linking accounts by
 // verified email. Order of resolution:
 //   1. A row already owns this provider id  -> use it (refresh name/avatar/email).
@@ -220,8 +253,9 @@ app.post('/auth/dev', async (req, res) => {
 // Get current user + couple status + unread plan changes
 app.get('/me', auth, async (req, res) => {
   captureTimezone(req);
+  captureNotifPermission(req);
   const user = await pool.query(
-    'SELECT id, email, name, avatar_url, timezone, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
+    'SELECT id, email, name, avatar_url, timezone, notif_permission, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
     [req.user.id]
   );
   const couple = await pool.query(
@@ -727,11 +761,13 @@ app.post('/activities/custom', auth, async (req, res) => {
   if (difficulty < 1 || difficulty > 5) return res.status(400).json({ error: 'Difficulty must be 1-5' });
 
   const couple = await pool.query(
-    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE AND user_b_id IS NOT NULL',
+    'SELECT id, user_a_id, user_b_id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE AND user_b_id IS NOT NULL',
     [req.user.id]
   );
   if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
   const coupleId = couple.rows[0].id;
+  const customPartnerId =
+    couple.rows[0].user_a_id === req.user.id ? couple.rows[0].user_b_id : couple.rows[0].user_a_id;
 
   const cat = await pool.query('SELECT id FROM categories WHERE id = $1', [categoryId]);
   if (cat.rows.length === 0) return res.status(400).json({ error: 'Invalid category' });
@@ -752,6 +788,14 @@ app.post('/activities/custom', auth, async (req, res) => {
   await pool.query(
     'INSERT INTO swipes (user_id, couple_id, activity_id, liked) VALUES ($1, $2, $3, TRUE)',
     [req.user.id, coupleId, activity.id]
+  );
+
+  // Notify partner — the new card surfaces in their deck.
+  notifyPartner(
+    customPartnerId,
+    req.user.id,
+    (name) => ({ title: 'New idea for you two', body: `${name} added "${title}" to your deck` }),
+    { route: '/swipe' }
   );
 
   res.json(activity);
