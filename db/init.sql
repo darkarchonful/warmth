@@ -150,6 +150,18 @@ CREATE TABLE memories (
     completed_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Ledger for server-scheduled pushes (scheduler.js). Dedup + frequency caps:
+-- send is gated on INSERT .. ON CONFLICT against the PK so overlapping cron
+-- runs can't double-send; "once per N days" is a NOT EXISTS on (user_id,type).
+CREATE TABLE notifications_log (
+    user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type      VARCHAR(64) NOT NULL,
+    dedup_key VARCHAR(128) NOT NULL,
+    sent_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, dedup_key)
+);
+CREATE INDEX idx_notifications_log_user_type ON notifications_log(user_id, type, sent_at DESC);
+
 -- Index for finding matches (both swiped)
 CREATE INDEX idx_swipes_couple_activity ON swipes(couple_id, activity_id);
 CREATE INDEX idx_swipes_user ON swipes(user_id, couple_id);

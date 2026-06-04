@@ -1,0 +1,63 @@
+# Hourly push-notification scheduler. Same image as warmth-api, different
+# entrypoint (node src/scheduler.js). Evaluates every B/C rule once an hour and
+# exits — local-hour gating inside the queries decides who actually gets a push
+# this run. NOT a long-running process; this is a Job fired on a cron.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: warmth-scheduler
+  namespace: warmth
+spec:
+  schedule: "0 * * * *"          # top of every hour, UTC
+  concurrencyPolicy: Forbid       # never overlap runs (cap/dedup is safe anyway)
+  startingDeadlineSeconds: 600     # skip a run rather than pile up if the node was down
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 300    # a run that hangs >5m is killed
+      template:
+        spec:
+          restartPolicy: Never
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: tier
+                        operator: In
+                        values: ["primary", "backup"]
+          imagePullSecrets:
+            - name: ghcr-pull
+          # Same DNS/host pinning as the API: postgres-warmth-svc via its stable
+          # ClusterIP (CoreDNS endpoints include a cross-WAN replica that times
+          # out), and public resolvers as fallback for the Expo push host.
+          hostAliases:
+            - ip: 10.43.5.36
+              hostnames:
+                - postgres-warmth-svc
+          dnsConfig:
+            nameservers:
+              - 1.1.1.1
+              - 8.8.8.8
+          containers:
+            - name: scheduler
+              image: ghcr.io/darkarchonful/warmth-api:v14
+              imagePullPolicy: IfNotPresent
+              command: ["node", "src/scheduler.js"]
+              env:
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: warmth-secrets
+                      key: postgres-password
+                - name: DATABASE_URL
+                  value: postgres://warmth:$(POSTGRES_PASSWORD)@postgres-warmth-svc:5432/warmth
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 250m
+                  memory: 128Mi
