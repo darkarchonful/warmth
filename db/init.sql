@@ -8,6 +8,7 @@ CREATE TABLE users (
     name VARCHAR(255) NOT NULL,
     gender VARCHAR(10),
     avatar_url TEXT,
+    timezone VARCHAR(64),
     created_at TIMESTAMP DEFAULT NOW()
 );
 
