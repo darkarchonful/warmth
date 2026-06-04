@@ -9,6 +9,8 @@ CREATE TABLE users (
     gender VARCHAR(10),
     avatar_url TEXT,
     timezone VARCHAR(64),
+    notif_permission VARCHAR(16),
+    notif_permission_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
