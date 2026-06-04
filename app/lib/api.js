@@ -24,6 +24,13 @@ export async function clearToken() {
 async function request(path, options = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  // Report the device timezone so the server can fire scheduled notifications
+  // in the user's local time. Persisted server-side only on /me; harmless
+  // elsewhere.
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) headers['X-Timezone'] = tz;
+  } catch {}
 
   const res = await fetch(`${API_URL}${path}`, {
     ...options,

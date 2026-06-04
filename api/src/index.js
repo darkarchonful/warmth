@@ -63,6 +63,25 @@ function auth(req, res, next) {
   }
 }
 
+// IANA timezone like 'Europe/Amsterdam', 'America/Argentina/Buenos_Aires', or
+// 'UTC'. Loose sanity check to keep junk out of the column; the scheduler does
+// authoritative validation when it resolves the zone.
+const TZ_RE = /^(?:UTC|[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+){1,2})$/;
+
+// Opportunistically persist the caller's timezone from the X-Timezone header.
+// Fire-and-forget and only writes when the value actually changed, so it's
+// cheap to call from a frequently-hit endpoint. Needs req.user (auth) set.
+function captureTimezone(req) {
+  const tz = req.headers['x-timezone'];
+  if (!tz || typeof tz !== 'string' || tz.length > 64 || !TZ_RE.test(tz)) return;
+  pool
+    .query('UPDATE users SET timezone = $1 WHERE id = $2 AND timezone IS DISTINCT FROM $1', [
+      tz,
+      req.user.id,
+    ])
+    .catch((e) => console.error('[tz] update failed', e.message));
+}
+
 // Find-or-create a user from a verified social identity, linking accounts by
 // verified email. Order of resolution:
 //   1. A row already owns this provider id  -> use it (refresh name/avatar/email).
@@ -216,8 +235,9 @@ app.post('/auth/dev', async (req, res) => {
 
 // Get current user + couple status + unread plan changes
 app.get('/me', auth, async (req, res) => {
+  captureTimezone(req);
   const user = await pool.query(
-    'SELECT id, email, name, avatar_url, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
+    'SELECT id, email, name, avatar_url, timezone, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
     [req.user.id]
   );
   const couple = await pool.query(
