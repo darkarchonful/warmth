@@ -73,7 +73,7 @@ async function dispatch({ userId, type, dedupKey, capInterval, title, body, data
 // ---------------------------------------------------------------------------
 async function weekendPrompt() {
   const { rows } = await pool.query(`
-    SELECT u.id, (now() AT TIME ZONE u.timezone)::date AS localdate
+    SELECT u.id, (now() AT TIME ZONE u.timezone)::date::text AS localdate
     FROM users u
     JOIN couples c ON c.active AND c.user_b_id IS NOT NULL
                   AND (c.user_a_id = u.id OR c.user_b_id = u.id)
@@ -107,7 +107,7 @@ async function weekendPrompt() {
 async function onARoll() {
   const { rows } = await pool.query(`
     SELECT u.id,
-           (now() AT TIME ZONE u.timezone)::date AS localdate,
+           (now() AT TIME ZONE u.timezone)::date::text AS localdate,
            (SELECT count(*) FROM memories m WHERE m.couple_id = c.id) AS cnt
     FROM couples c
     JOIN users u ON (u.id = c.user_a_id OR u.id = c.user_b_id)
@@ -141,7 +141,7 @@ async function asymmetryNudge() {
   const { rows } = await pool.query(`
     SELECT silent.id AS user_id,
            partner.name AS partner_name,
-           (now() AT TIME ZONE silent.timezone)::date AS localdate
+           (now() AT TIME ZONE silent.timezone)::date::text AS localdate
     FROM couples c
     JOIN users silent  ON silent.id  IN (c.user_a_id, c.user_b_id)
     JOIN users partner ON partner.id IN (c.user_a_id, c.user_b_id) AND partner.id <> silent.id
