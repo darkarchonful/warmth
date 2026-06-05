@@ -62,8 +62,14 @@ async function dispatch({ userId, type, dedupKey, capInterval, title, body, data
 }
 
 // ---------------------------------------------------------------------------
-// C2 — Weekend prompt. Saturday (DOW 6) at local 10:00, both partners, unless
-// they've already swiped today. Once-per-local-date via dedup_key.
+// C2 — Weekend prompt. Friday (DOW 5) at local 18:00, to both partners — but
+// only for couples who let the whole week pass without planning anything (no
+// match in the last 7 days). Skips brand-new couples: those paired within the
+// last 7 days get a first-week grace period so we don't nag a pair that just
+// joined. A match here = a checklist row (both swiped the same card). We only
+// see in-app activity, so a couple that planned offline may still get this —
+// that's an acceptable nudge, far better than missing the genuinely dormant.
+// Once-per-local-date via dedup_key.
 // ---------------------------------------------------------------------------
 async function weekendPrompt() {
   const { rows } = await pool.query(`
@@ -73,20 +79,20 @@ async function weekendPrompt() {
                   AND (c.user_a_id = u.id OR c.user_b_id = u.id)
     WHERE u.timezone IS NOT NULL
       AND EXISTS (SELECT 1 FROM push_tokens pt WHERE pt.user_id = u.id)
-      AND EXTRACT(DOW  FROM (now() AT TIME ZONE u.timezone)) = 6
-      AND EXTRACT(HOUR FROM (now() AT TIME ZONE u.timezone)) = 10
+      AND EXTRACT(DOW  FROM (now() AT TIME ZONE u.timezone)) = 5
+      AND EXTRACT(HOUR FROM (now() AT TIME ZONE u.timezone)) = 18
+      AND c.paired_at < now() - interval '7 days'
       AND NOT EXISTS (
-        SELECT 1 FROM swipes s
-        WHERE s.user_id = u.id
-          AND (s.swiped_at AT TIME ZONE 'UTC' AT TIME ZONE u.timezone)::date
-              = (now() AT TIME ZONE u.timezone)::date
+        SELECT 1 FROM checklist ch
+        WHERE ch.couple_id = c.id
+          AND ch.matched_at > now() - interval '7 days'
       )
   `);
   let sent = 0;
   for (const r of rows) {
     if (await dispatch({
       userId: r.id, type: 'weekend', dedupKey: `weekend:${r.localdate}`,
-      title: "It's the weekend ☀️", body: 'Find something to do together.',
+      title: "The weekend's almost here 🗓️", body: 'Make a plan together for this weekend.',
       data: { route: '/swipe' },
     })) sent++;
   }
