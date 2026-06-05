@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { api } from './api';
+import { api, setNotifPermission } from './api';
 
 // Lazily set the handler the first time we register, instead of at module
 // import (which runs at launch). Avoids touching the notifications native
@@ -38,6 +38,10 @@ export async function registerForPush() {
     const asked = await Notifications.requestPermissionsAsync();
     status = asked.status;
   }
+  // Report the final status (incl. 'denied') so the next request carries it to
+  // the server — captured before the early return below, which is where a
+  // denial would otherwise become invisible to the backend.
+  setNotifPermission(status);
   if (status !== 'granted') return;
 
   const projectId =
