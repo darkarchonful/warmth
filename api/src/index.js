@@ -283,7 +283,7 @@ app.get('/me', auth, async (req, res) => {
   captureTimezone(req);
   captureNotifPermission(req);
   const user = await pool.query(
-    'SELECT id, email, name, avatar_url, timezone, notif_permission, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
+    'SELECT id, email, name, avatar_url, name_confirmed, timezone, notif_permission, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
     [req.user.id]
   );
   const couple = await pool.query(
@@ -320,6 +320,23 @@ app.get('/me', auth, async (req, res) => {
     unreadMemories = b.rows[0].n;
   }
   res.json({ user: user.rows[0], couple: couple.rows[0] || null, unreadCount, unreadMemories });
+});
+
+// Update display name. The name is a pure display field — identity is keyed on
+// google_id/apple_id, so renaming touches nothing about login or pairing. Used
+// both by the post-registration "pick your name" prompt and by Settings.
+// Saving here also marks name_confirmed = TRUE so the prompt never reappears.
+app.patch('/me', auth, async (req, res) => {
+  const raw = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  if (!raw) return res.status(400).json({ error: 'Name is required' });
+  if (raw.length > 40) return res.status(400).json({ error: 'Name is too long' });
+  const result = await pool.query(
+    `UPDATE users SET name = $2, name_confirmed = TRUE
+       WHERE id = $1
+       RETURNING id, email, name, avatar_url, name_confirmed`,
+    [req.user.id, raw]
+  );
+  res.json({ user: result.rows[0] });
 });
 
 // Delete account: wipes the user and any couple they belong to (with all

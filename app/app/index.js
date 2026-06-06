@@ -21,6 +21,8 @@ export default function Home() {
   const [myInvite, setMyInvite] = useState('');
   const [error, setError] = useState('');
   const [waitingDots, setWaitingDots] = useState('');
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   const [, googleResp, promptGoogle] = Google.useIdTokenAuthRequest({
     clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
@@ -50,6 +52,12 @@ export default function Home() {
   useEffect(() => {
     init();
   }, []);
+
+  // Seed the name field once when a freshly-registered user needs to confirm
+  // their name — pre-filled with whatever we derived (often from their email).
+  useEffect(() => {
+    if (user && !user.name_confirmed) setNameDraft(user.name || '');
+  }, [user?.id, user?.name_confirmed]);
 
   useEffect(() => {
     if (!myInvite) return;
@@ -171,6 +179,21 @@ export default function Home() {
     }
   }
 
+  async function saveName() {
+    const trimmed = nameDraft.trim();
+    if (!trimmed) { setError('Please enter a name'); return; }
+    setSavingName(true);
+    try {
+      const data = await api.updateName(trimmed);
+      setUser(data.user);
+      setError('');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSavingName(false);
+    }
+  }
+
   async function createCouple() {
     try {
       const data = await api.createCouple();
@@ -255,6 +278,46 @@ export default function Home() {
           </View>
         )}
       </View>
+    );
+  }
+
+  // Logged in but hasn't confirmed their display name yet (new sign-up). The
+  // name we have is often derived from their email — let them set a real one.
+  if (!user.name_confirmed) {
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: colors.bg }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.container}>
+            <Text style={styles.title}>What's your name?</Text>
+            <Text style={styles.subtitle}>This is how your partner will see you</Text>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <TextInput
+              style={styles.input}
+              value={nameDraft}
+              onChangeText={setNameDraft}
+              placeholder="Your name"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="words"
+              autoCorrect={false}
+              maxLength={40}
+              returnKeyType="done"
+              onSubmitEditing={saveName}
+            />
+            <TouchableOpacity
+              style={[styles.button, savingName && { opacity: 0.6 }]}
+              onPress={saveName}
+              disabled={savingName}
+            >
+              <Text style={styles.buttonText}>{savingName ? 'Saving…' : 'Continue'}</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     );
   }
 

@@ -75,6 +75,10 @@ export const api = {
 
   // User
   me: () => request('/me'),
+  updateName: (name) => request('/me', {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  }),
   deleteAccount: () => request('/me', { method: 'DELETE' }),
 
   // Couple
