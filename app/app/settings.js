@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Application from 'expo-application';
@@ -21,6 +22,9 @@ export default function Settings() {
   const [confirm, setConfirm] = useState(null);
   const [working, setWorking] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     api.me()
@@ -64,6 +68,26 @@ export default function Settings() {
     } catch (e) {
       Alert.alert('Error', e.message);
       setWorking(false);
+    }
+  }
+
+  function openNameEditor() {
+    setNameDraft(me?.user?.name || '');
+    setEditingName(true);
+  }
+
+  async function handleSaveName() {
+    const trimmed = nameDraft.trim();
+    if (!trimmed) { Alert.alert('Name required', 'Please enter a name.'); return; }
+    setSavingName(true);
+    try {
+      const data = await api.updateName(trimmed);
+      setMe(prev => ({ ...prev, user: { ...prev.user, name: data.user.name } }));
+      setEditingName(false);
+    } catch (e) {
+      Alert.alert('Could not save', e.message);
+    } finally {
+      setSavingName(false);
     }
   }
 
@@ -111,7 +135,13 @@ export default function Settings() {
         <ScrollView contentContainerStyle={styles.scroll}>
           <Text style={styles.sectionLabel}>Account</Text>
           <View style={styles.card}>
-            <Row label="Name" value={me?.user?.name || '—'} />
+            <TouchableOpacity style={styles.row} onPress={openNameEditor} activeOpacity={0.6}>
+              <Text style={styles.rowLabel}>Name</Text>
+              <View style={styles.rowValueWrap}>
+                <Text style={styles.rowValue}>{me?.user?.name || '—'}</Text>
+                <Text style={styles.editHint}>Edit</Text>
+              </View>
+            </TouchableOpacity>
             <Row label="Email" value={me?.user?.email || '—'} last />
           </View>
 
@@ -197,6 +227,40 @@ export default function Settings() {
           onConfirm={() => { setConfirm(null); handleUnpair(); }}
           onCancel={() => setConfirm(null)}
         />
+      )}
+
+      {editingName && (
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Your name</Text>
+            <Text style={styles.modalBody}>This is how your partner sees you in the app.</Text>
+            <TextInput
+              style={styles.nameInput}
+              value={nameDraft}
+              onChangeText={setNameDraft}
+              placeholder="Your name"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="words"
+              autoCorrect={false}
+              maxLength={40}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleSaveName}
+            />
+            <View style={styles.modalRow}>
+              <TouchableOpacity onPress={() => setEditingName(false)} style={[styles.modalBtn, styles.modalCancel]} disabled={savingName}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveName}
+                style={[styles.modalBtn, styles.modalConfirm, savingName && styles.modalBtnDisabled]}
+                disabled={savingName}
+              >
+                <Text style={styles.modalConfirmText}>{savingName ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       )}
 
       {confirm === 'delete' && (
@@ -310,6 +374,8 @@ const styles = StyleSheet.create({
   rowAction: { flexDirection: 'column', alignItems: 'flex-start' },
   rowLabel: { fontSize: 15, color: colors.text },
   rowValue: { fontSize: 15, color: colors.textLight, textAlign: 'right', flexShrink: 1 },
+  rowValueWrap: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
+  editHint: { fontSize: 13, color: colors.accent, fontWeight: '500', marginLeft: 10 },
   actionText: { fontSize: 16, fontWeight: '500' },
   rowSub: { fontSize: 12, color: colors.textMuted, marginTop: 3 },
   footer: {
@@ -343,4 +409,15 @@ const styles = StyleSheet.create({
   modalDanger: { backgroundColor: '#B84040' },
   modalBtnDisabled: { opacity: 0.5 },
   modalConfirmText: { color: '#fff', fontSize: 15, fontWeight: '500' },
+  nameInput: {
+    backgroundColor: colors.bg,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: colors.text,
+    marginBottom: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E8DDD0',
+  },
 });

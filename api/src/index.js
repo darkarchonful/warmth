@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const appleSignin = require('apple-signin-auth');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const { sendPush } = require('./push');
 
 const app = express();
@@ -49,6 +50,51 @@ function generateInviteCode() {
     code += INVITE_ALPHABET[crypto.randomInt(0, INVITE_ALPHABET.length)];
   }
   return code;
+}
+
+// --- Passwordless email login ----------------------------------------------
+// SMTP transport, built lazily so the server still boots if mail isn't
+// configured (email login simply 503s; Google/Apple keep working).
+let mailer = null;
+function getMailer() {
+  if (mailer) return mailer;
+  if (!process.env.SMTP_HOST) return null;
+  mailer = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: Number(process.env.SMTP_PORT) === 465, // 587 uses STARTTLS (false)
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+  return mailer;
+}
+const MAIL_FROM = process.env.MAIL_FROM || `Warmth <${process.env.SMTP_USER}>`;
+
+function hashCode(code) {
+  return crypto.createHash('sha256').update(String(code)).digest('hex');
+}
+// 6-digit code, zero-padded. crypto.randomInt for a uniform draw.
+function generateLoginCode() {
+  return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+}
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Find-or-create a user from a verified email (the email-login path). The
+// emailed code proves inbox ownership, so an existing row with this email is
+// the same human — links naturally to a prior Google/Apple account. New rows
+// start name_confirmed = FALSE so the app prompts for a real display name.
+async function upsertEmailUser(email) {
+  const existing = await pool.query(
+    'SELECT id, email, name, avatar_url, name_confirmed FROM users WHERE email = $1',
+    [email]
+  );
+  if (existing.rows[0]) return existing.rows[0];
+  const name = email.split('@')[0] || 'Friend';
+  const created = await pool.query(
+    `INSERT INTO users (email, name) VALUES ($1, $2)
+     RETURNING id, email, name, avatar_url, name_confirmed`,
+    [email, name]
+  );
+  return created.rows[0];
 }
 
 // Auth middleware
@@ -274,6 +320,84 @@ app.post('/auth/apple', async (req, res) => {
   }
 });
 
+// Passwordless email login — step 1: request a code. We email a 6-digit code
+// and store only its hash. Throttled to one send per 60s per email. Always
+// returns ok (don't reveal whether an account exists) unless the email is
+// malformed or mail is unconfigured.
+app.post('/auth/email/request', async (req, res) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email' });
+
+  const transport = getMailer();
+  if (!transport) return res.status(503).json({ error: 'Email login is unavailable' });
+
+  // Throttle resends.
+  const existing = await pool.query(
+    'SELECT last_sent_at FROM email_login_codes WHERE email = $1',
+    [email]
+  );
+  if (existing.rows[0]) {
+    const since = Date.now() - new Date(existing.rows[0].last_sent_at).getTime();
+    if (since < 60_000) {
+      return res.status(429).json({ error: 'Please wait a moment before requesting another code' });
+    }
+  }
+
+  const code = generateLoginCode();
+  await pool.query(
+    `INSERT INTO email_login_codes (email, code_hash, expires_at, attempts, last_sent_at)
+     VALUES ($1, $2, now() + interval '10 minutes', 0, now())
+     ON CONFLICT (email) DO UPDATE
+       SET code_hash = EXCLUDED.code_hash,
+           expires_at = EXCLUDED.expires_at,
+           attempts = 0,
+           last_sent_at = now()`,
+    [email, hashCode(code)]
+  );
+
+  try {
+    await transport.sendMail({
+      from: MAIL_FROM,
+      to: email,
+      subject: `${code} is your Warmth code`,
+      text: `Your Warmth login code is ${code}\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.`,
+    });
+  } catch (e) {
+    console.error('[email-login] send failed:', e.message);
+    return res.status(502).json({ error: 'Could not send the code, try again' });
+  }
+  res.json({ ok: true });
+});
+
+// Passwordless email login — step 2: verify the code and issue a JWT. Caps
+// attempts to stop brute force; consumes the code on success.
+app.post('/auth/email/verify', async (req, res) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+  if (!EMAIL_RE.test(email) || !/^\d{6}$/.test(code)) {
+    return res.status(400).json({ error: 'Invalid email or code' });
+  }
+
+  const row = await pool.query('SELECT code_hash, expires_at, attempts FROM email_login_codes WHERE email = $1', [email]);
+  const rec = row.rows[0];
+  if (!rec || new Date(rec.expires_at).getTime() < Date.now()) {
+    return res.status(400).json({ error: 'Code expired — request a new one' });
+  }
+  if (rec.attempts >= 5) {
+    return res.status(429).json({ error: 'Too many attempts — request a new code' });
+  }
+  if (hashCode(code) !== rec.code_hash) {
+    await pool.query('UPDATE email_login_codes SET attempts = attempts + 1 WHERE email = $1', [email]);
+    return res.status(400).json({ error: 'Incorrect code' });
+  }
+
+  // Valid — consume the code and log in.
+  await pool.query('DELETE FROM email_login_codes WHERE email = $1', [email]);
+  const user = await upsertEmailUser(email);
+  const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+  res.json({ token, user });
+});
+
 // Dev login (skip Google for testing)
 app.post('/auth/dev', async (req, res) => {
   // Dev-only login. Without this gate anyone could mint a 30-day token for any
@@ -299,7 +423,7 @@ app.get('/me', auth, async (req, res) => {
   captureTimezone(req);
   captureNotifPermission(req);
   const user = await pool.query(
-    'SELECT id, email, name, avatar_url, timezone, notif_permission, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
+    'SELECT id, email, name, avatar_url, name_confirmed, timezone, notif_permission, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
     [req.user.id]
   );
   const couple = await pool.query(
@@ -340,6 +464,23 @@ app.get('/me', auth, async (req, res) => {
     couple.rows[0].free_memory_limit = FREE_MEMORY_LIMIT;
   }
   res.json({ user: user.rows[0], couple: couple.rows[0] || null, unreadCount, unreadMemories });
+});
+
+// Update display name. The name is a pure display field — identity is keyed on
+// google_id/apple_id, so renaming touches nothing about login or pairing. Used
+// both by the post-registration "pick your name" prompt and by Settings.
+// Saving here also marks name_confirmed = TRUE so the prompt never reappears.
+app.patch('/me', auth, async (req, res) => {
+  const raw = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  if (!raw) return res.status(400).json({ error: 'Name is required' });
+  if (raw.length > 40) return res.status(400).json({ error: 'Name is too long' });
+  const result = await pool.query(
+    `UPDATE users SET name = $2, name_confirmed = TRUE
+       WHERE id = $1
+       RETURNING id, email, name, avatar_url, name_confirmed`,
+    [req.user.id, raw]
+  );
+  res.json({ user: result.rows[0] });
 });
 
 // --- Premium (couple-level entitlement) ---

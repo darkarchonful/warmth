@@ -21,6 +21,12 @@ export default function Home() {
   const [myInvite, setMyInvite] = useState('');
   const [error, setError] = useState('');
   const [waitingDots, setWaitingDots] = useState('');
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  const [emailMode, setEmailMode] = useState(null); // null | 'email' | 'code'
+  const [emailInput, setEmailInput] = useState('');
+  const [codeInput, setCodeInput] = useState('');
+  const [emailBusy, setEmailBusy] = useState(false);
 
   const [, googleResp, promptGoogle] = Google.useIdTokenAuthRequest({
     clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
@@ -50,6 +56,12 @@ export default function Home() {
   useEffect(() => {
     init();
   }, []);
+
+  // Seed the name field once when a freshly-registered user needs to confirm
+  // their name — pre-filled with whatever we derived (often from their email).
+  useEffect(() => {
+    if (user && !user.name_confirmed) setNameDraft(user.name || '');
+  }, [user?.id, user?.name_confirmed]);
 
   useEffect(() => {
     if (!myInvite) return;
@@ -171,6 +183,65 @@ export default function Home() {
     }
   }
 
+  async function requestEmailCode() {
+    const e = emailInput.trim().toLowerCase();
+    if (!e) { setError('Enter your email'); return; }
+    setEmailBusy(true);
+    try {
+      await api.requestEmailCode(e);
+      setCodeInput('');
+      setEmailMode('code');
+      setError('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  async function verifyEmailCode() {
+    const c = codeInput.trim();
+    if (c.length !== 6) { setError('Enter the 6-digit code'); return; }
+    setEmailBusy(true);
+    try {
+      const data = await api.verifyEmailCode(emailInput.trim().toLowerCase(), c);
+      await saveToken(data.token);
+      const me = await api.me();
+      setUser(me.user);
+      setCouple(me.couple);
+      setEmailMode(null);
+      setError('');
+      registerForPush();
+      if (me.couple?.paired_at) router.replace('/swipe');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  function exitEmailLogin() {
+    setEmailMode(null);
+    setEmailInput('');
+    setCodeInput('');
+    setError('');
+  }
+
+  async function saveName() {
+    const trimmed = nameDraft.trim();
+    if (!trimmed) { setError('Please enter a name'); return; }
+    setSavingName(true);
+    try {
+      const data = await api.updateName(trimmed);
+      setUser(data.user);
+      setError('');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSavingName(false);
+    }
+  }
+
   async function createCouple() {
     try {
       const data = await api.createCouple();
@@ -211,7 +282,83 @@ export default function Home() {
     );
   }
 
-  // Not logged in
+  // Not logged in — email-login sub-flow (enter email, then the code).
+  if (!user && emailMode) {
+    const onCode = emailMode === 'code';
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: colors.bg }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.container}>
+            <Text style={styles.title}>Warmth</Text>
+            <Text style={styles.subtitle}>
+              {onCode ? `Enter the code we sent to\n${emailInput.trim().toLowerCase()}` : 'Sign in with your email'}
+            </Text>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            {onCode ? (
+              <>
+                <TextInput
+                  style={[styles.input, { letterSpacing: 8, textAlign: 'center', fontSize: 24 }]}
+                  value={codeInput}
+                  onChangeText={(t) => setCodeInput(t.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="------"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={verifyEmailCode}
+                />
+                <TouchableOpacity
+                  style={[styles.button, emailBusy && { opacity: 0.6 }]}
+                  onPress={verifyEmailCode}
+                  disabled={emailBusy}
+                >
+                  <Text style={styles.buttonText}>{emailBusy ? 'Verifying…' : 'Verify'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ marginTop: 18 }} onPress={requestEmailCode} disabled={emailBusy}>
+                  <Text style={styles.cancelLine}>Resend code</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TextInput
+                  style={styles.input}
+                  value={emailInput}
+                  onChangeText={setEmailInput}
+                  placeholder="you@example.com"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={requestEmailCode}
+                />
+                <TouchableOpacity
+                  style={[styles.button, emailBusy && { opacity: 0.6 }]}
+                  onPress={requestEmailCode}
+                  disabled={emailBusy}
+                >
+                  <Text style={styles.buttonText}>{emailBusy ? 'Sending…' : 'Send code'}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity style={{ marginTop: 24 }} onPress={exitEmailLogin} disabled={emailBusy}>
+              <Text style={styles.cancelLine}>Back to all sign-in options</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // Not logged in — sign-in options.
   if (!user) {
     return (
       <View style={styles.container}>
@@ -237,6 +384,13 @@ export default function Home() {
           />
         )}
 
+        <TouchableOpacity
+          style={styles.googleButton}
+          onPress={() => { setError(''); setEmailMode('email'); }}
+        >
+          <Text style={styles.googleButtonText}>Continue with email</Text>
+        </TouchableOpacity>
+
         {__DEV__ && (
           <View style={styles.devBox}>
             <Text style={styles.devLabel}>Dev Login</Text>
@@ -258,6 +412,46 @@ export default function Home() {
     );
   }
 
+  // Logged in but hasn't confirmed their display name yet (new sign-up). The
+  // name we have is often derived from their email — let them set a real one.
+  if (!user.name_confirmed) {
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: colors.bg }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.container}>
+            <Text style={styles.title}>What's your name?</Text>
+            <Text style={styles.subtitle}>This is how your partner will see you</Text>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <TextInput
+              style={styles.input}
+              value={nameDraft}
+              onChangeText={setNameDraft}
+              placeholder="Your name"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="words"
+              autoCorrect={false}
+              maxLength={40}
+              returnKeyType="done"
+              onSubmitEditing={saveName}
+            />
+            <TouchableOpacity
+              style={[styles.button, savingName && { opacity: 0.6 }]}
+              onPress={saveName}
+              disabled={savingName}
+            >
+              <Text style={styles.buttonText}>{savingName ? 'Saving…' : 'Continue'}</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    );
+  }
+
   // Logged in but no couple
   return (
     <KeyboardAvoidingView
@@ -274,7 +468,8 @@ export default function Home() {
           <Text style={styles.subtitle}>Pair with your partner</Text>
 
           <TouchableOpacity
-            style={{ position: 'absolute', top: 50, right: 20 }}
+            style={{ position: 'absolute', top: 76, right: 20, justifyContent: 'center' }}
+            hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }}
             onPress={async () => { await clearToken(); setUser(null); setCouple(null); setMyInvite(''); }}
           >
             <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '500' }}>Logout</Text>
