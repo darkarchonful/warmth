@@ -260,6 +260,10 @@ app.post('/auth/apple', async (req, res) => {
 
 // Dev login (skip Google for testing)
 app.post('/auth/dev', async (req, res) => {
+  // Dev-only login. Without this gate anyone could mint a 30-day token for any
+  // email. Enabled only where DEV_AUTH=1 (local compose); absent in prod, where
+  // it 404s as if it doesn't exist. Real auth is Google/Apple sign-in.
+  if (process.env.DEV_AUTH !== '1') return res.status(404).json({ error: 'Not found' });
   const { name, email } = req.body;
   const googleId = `dev_${email}`;
   const result = await pool.query(
