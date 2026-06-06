@@ -631,12 +631,14 @@ const styles = StyleSheet.create({
   },
   googleButton: {
     backgroundColor: '#fff',
-    paddingVertical: 14,
-    paddingHorizontal: 40,
+    width: 260,
+    height: 48,
     borderRadius: 25,
     borderWidth: 1,
     borderColor: '#ddd',
     marginBottom: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   googleButtonText: {
     color: '#444',
