@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Alert } 
 import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api } from '../../lib/api';
+import CoachCard from '../../components/CoachCard';
 
 export default function Checklist() {
   const router = useRouter();
@@ -12,6 +13,7 @@ export default function Checklist() {
   const [customTitle, setCustomTitle] = useState('');
   const [customTagline, setCustomTagline] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [coachDone, setCoachDone] = useState(false);
 
   useEffect(() => {
     load();
@@ -33,7 +35,8 @@ export default function Checklist() {
   }
 
   async function handleComplete(id) {
-    await api.complete(id);
+    const result = await api.complete(id);
+    if (result?.first_completion) setCoachDone(true);
     load();
   }
 
@@ -211,6 +214,14 @@ export default function Checklist() {
 
   return (
     <View style={styles.container}>
+      <CoachCard
+        visible={coachDone}
+        emoji="✨"
+        title="Your first memory!"
+        body="Nice — done together. It just moved to Memories, where you can rate it ⭐ and look back anytime."
+        cta="See Memories"
+        onPress={() => { setCoachDone(false); router.push('/memories'); }}
+      />
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerSide} onPress={() => router.back()}>
           <Text style={[styles.back, { textAlign: 'left' }]}>Back</Text>

@@ -4,6 +4,7 @@ import { PinchGestureHandler, PanGestureHandler, State } from 'react-native-gest
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../lib/colors';
 import { api, API_URL } from '../lib/api';
+import CoachCard from '../components/CoachCard';
 
 function resolveImage(url) {
   if (!url) return null;
@@ -55,6 +56,7 @@ export default function Swipe() {
   const [blockMessage, setBlockMessage] = useState('');
   const [previewImages, setPreviewImages] = useState([]);
   const [matchPopup, setMatchPopup] = useState(null);
+  const [coachMatch, setCoachMatch] = useState(false);
   const [done, setDone] = useState(false);
   const [backendVersion, setBackendVersion] = useState('');
   const [unread, setUnread] = useState(0);
@@ -225,8 +227,11 @@ export default function Swipe() {
       try {
         const result = await api.nudgeSwipe(current.memory_id, liked);
         if (result.match) {
-          setMatchPopup(current.title);
-          setTimeout(() => { setMatchPopup(null); loadNext(); }, 2500);
+          if (result.first_match) { setCoachMatch(true); loadNext(); }
+          else {
+            setMatchPopup(current.title);
+            setTimeout(() => { setMatchPopup(null); loadNext(); }, 2500);
+          }
         } else {
           loadNext();
         }
@@ -238,11 +243,14 @@ export default function Swipe() {
     try {
       const result = await api.swipe(current.id, liked);
       if (result.match) {
-        setMatchPopup(current.title);
-        setTimeout(() => {
-          setMatchPopup(null);
-          loadNext();
-        }, 2500);
+        if (result.first_match) { setCoachMatch(true); loadNext(); }
+        else {
+          setMatchPopup(current.title);
+          setTimeout(() => {
+            setMatchPopup(null);
+            loadNext();
+          }, 2500);
+        }
       } else {
         loadNext();
       }
@@ -385,6 +393,21 @@ export default function Swipe() {
           <Text style={styles.matchTitle}>You've seen everything</Text>
           <Text style={styles.matchFooter}>New ideas coming soon</Text>
         </View>
+      </View>
+    );
+  }
+
+  if (coachMatch) {
+    return (
+      <View style={styles.matchContainer}>
+        <CoachCard
+          visible
+          emoji="🎉"
+          title="It's a match!"
+          body="You both picked this — it's now in Plans. Head there, do it together, then tick it off. That's the whole game."
+          cta="Open Plans"
+          onPress={() => { setCoachMatch(false); router.push('/checklist'); }}
+        />
       </View>
     );
   }

@@ -99,6 +99,30 @@ function notifyPartner(partnerId, actorId, build, data = {}) {
     .catch((e) => console.error('[push] notifyPartner', e.message));
 }
 
+// Like notifyPartner, but fires at most once per (partner, dedupKey) — backed
+// by the notifications_log ledger. For actions that can re-fire on the same
+// object (e.g. star-rating a memory, where adjusting the stars re-PATCHes):
+// the partner gets one push per memory, not one per tap. Sends only when the
+// ledger INSERT wins (no prior row).
+function notifyPartnerOnce(partnerId, actorId, type, dedupKey, build, data = {}) {
+  if (!partnerId) return;
+  pool
+    .query(
+      `INSERT INTO notifications_log (user_id, type, dedup_key) VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, dedup_key) DO NOTHING RETURNING user_id`,
+      [partnerId, type, dedupKey]
+    )
+    .then(({ rows }) => {
+      if (rows.length === 0) return; // already notified for this key
+      return pool.query('SELECT name FROM users WHERE id = $1', [actorId]).then(({ rows: u }) => {
+        const name = u[0]?.name || 'Your partner';
+        const { title, body } = build(name);
+        return sendPush(pool, partnerId, title, body, data);
+      });
+    })
+    .catch((e) => console.error('[push] notifyPartnerOnce', e.message));
+}
+
 // Find-or-create a user from a verified social identity, linking accounts by
 // verified email. Order of resolution:
 //   1. A row already owns this provider id  -> use it (refresh name/avatar/email).
@@ -838,7 +862,14 @@ app.post('/activities/:id/swipe', auth, async (req, res) => {
     );
 
     if (partnerSwipe.rows.length > 0 && partnerSwipe.rows[0].liked) {
-      // It's a match! Add to checklist
+      // It's a match! Add to checklist. Detect the couple's very first match
+      // (checklist was empty) so the client can show a one-time "here's how it
+      // works" coach card.
+      const prior = await pool.query(
+        'SELECT 1 FROM checklist WHERE couple_id = $1 LIMIT 1',
+        [c.id]
+      );
+      const firstMatch = prior.rows.length === 0;
       await pool.query(
         'INSERT INTO checklist (couple_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
         [c.id, activityId]
@@ -856,7 +887,7 @@ app.post('/activities/:id/swipe', auth, async (req, res) => {
           ).catch(e => console.error('[push] match', e.message));
         }
       }).catch(e => console.error('[push] match lookup', e.message));
-      return res.json({ match: true, message: 'You both want this!' });
+      return res.json({ match: true, message: 'You both want this!', first_match: firstMatch });
     }
   }
 
@@ -1048,6 +1079,7 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
   const isSub = item.rows[0].parent_checklist_id !== null;
   const isJourney = item.rows[0].is_journey === true;
   const bothDone = item.rows[0].completed_by_a && item.rows[0].completed_by_b;
+  let firstCompletion = false;
   if (bothDone) {
     await pool.query(
       "UPDATE checklist SET status = 'done', completed_at = NOW(), updated_at = NOW() WHERE id = $1",
@@ -1056,6 +1088,9 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
     // Sub-steps never create their own memory — the journey rolls up into
     // one rich memory when the parent completes.
     if (!isSub) {
+      // First-ever completed memory for this couple → one-time coach card.
+      const priorMem = await pool.query('SELECT 1 FROM memories WHERE couple_id = $1 LIMIT 1', [c.id]);
+      firstCompletion = priorMem.rows.length === 0;
       let journeySteps = null;
       if (isJourney) {
         const steps = await pool.query(
@@ -1103,7 +1138,7 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
       .catch(e => console.error('[push] complete', e.message));
   }).catch(e => console.error('[push] complete lookup', e.message));
 
-  res.json({ completed: true });
+  res.json({ completed: true, first_completion: firstCompletion });
 });
 
 // Delete a done checklist item (and its memory). Rejected for items that
@@ -1184,7 +1219,7 @@ app.get('/memories', auth, async (req, res) => {
 app.patch('/memories/:id', auth, async (req, res) => {
   const { note, rating, mood } = req.body;
   const couple = await pool.query(
-    'SELECT id, user_a_id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    'SELECT id, user_a_id, user_b_id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
     [req.user.id]
   );
   if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
@@ -1208,6 +1243,18 @@ app.patch('/memories/:id', auth, async (req, res) => {
     values
   );
   if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+
+  // Notify the partner when this user stars (rates) the shared memory. Deduped
+  // to one push per memory per rater so adjusting the stars doesn't spam.
+  if (rating !== undefined && rating !== null) {
+    const partnerId = isA ? couple.rows[0].user_b_id : couple.rows[0].user_a_id;
+    notifyPartnerOnce(
+      partnerId, req.user.id, 'memory_star', `memory_star:${req.params.id}:${req.user.id}`,
+      (name) => ({ title: `${name} loved a memory ⭐`, body: `${name} rated a date you did together` }),
+      { route: `/memories/${req.params.id}` }
+    );
+  }
+
   res.json(result.rows[0]);
 });
 
