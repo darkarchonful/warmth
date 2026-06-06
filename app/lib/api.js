@@ -72,6 +72,14 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ identityToken, fullName }),
   }),
+  requestEmailCode: (email) => request('/auth/email/request', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  }),
+  verifyEmailCode: (email, code) => request('/auth/email/verify', {
+    method: 'POST',
+    body: JSON.stringify({ email, code }),
+  }),
 
   // User
   me: () => request('/me'),
