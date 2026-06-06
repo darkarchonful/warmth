@@ -450,7 +450,7 @@ export default function Swipe() {
   return (
     <View style={styles.container}>
       <View style={styles.nav}>
-        <TouchableOpacity style={styles.navSide} onPress={() => router.push('/checklist')}>
+        <TouchableOpacity style={styles.navSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.push('/checklist')}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={[styles.navItem, { textAlign: 'left' }]}>Plans</Text>
             {unread > 0 && <PulsingDot />}
@@ -472,7 +472,7 @@ export default function Swipe() {
             <Text style={styles.navTitleCaret}>⌄</Text>
           </Animated.View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navSide} onPress={() => router.push('/memories')}>
+        <TouchableOpacity style={styles.navSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.push('/memories')}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
             <Text style={[styles.navItem, { textAlign: 'right' }]}>Memories</Text>
             {unreadMem > 0 && <PulsingDot />}
@@ -725,6 +725,8 @@ const styles = StyleSheet.create({
   },
   navSide: {
     flex: 1,
+    alignSelf: 'stretch',
+    justifyContent: 'center',
   },
   navCenter: {
     flex: 1,

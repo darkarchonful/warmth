@@ -223,7 +223,7 @@ export default function Checklist() {
         onPress={() => { setCoachDone(false); router.push('/memories'); }}
       />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerSide} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.headerSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.back()}>
           <Text style={[styles.back, { textAlign: 'left' }]}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Our Plans</Text>
