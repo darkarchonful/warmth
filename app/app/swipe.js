@@ -5,6 +5,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../lib/colors';
 import { api, API_URL } from '../lib/api';
 import Paywall from '../components/Paywall';
+import CoachCard from '../components/CoachCard';
 
 function resolveImage(url) {
   if (!url) return null;
@@ -57,6 +58,7 @@ export default function Swipe() {
   const [premiumRequired, setPremiumRequired] = useState(false);
   const [previewImages, setPreviewImages] = useState([]);
   const [matchPopup, setMatchPopup] = useState(null);
+  const [coachMatch, setCoachMatch] = useState(false);
   const [done, setDone] = useState(false);
   const [backendVersion, setBackendVersion] = useState('');
   const [unread, setUnread] = useState(0);
@@ -231,8 +233,11 @@ export default function Swipe() {
       try {
         const result = await api.nudgeSwipe(current.memory_id, liked);
         if (result.match) {
-          setMatchPopup(current.title);
-          setTimeout(() => { setMatchPopup(null); loadNext(); }, 2500);
+          if (result.first_match) { setCoachMatch(true); loadNext(); }
+          else {
+            setMatchPopup(current.title);
+            setTimeout(() => { setMatchPopup(null); loadNext(); }, 2500);
+          }
         } else {
           loadNext();
         }
@@ -244,11 +249,14 @@ export default function Swipe() {
     try {
       const result = await api.swipe(current.id, liked);
       if (result.match) {
-        setMatchPopup(current.title);
-        setTimeout(() => {
-          setMatchPopup(null);
-          loadNext();
-        }, 2500);
+        if (result.first_match) { setCoachMatch(true); loadNext(); }
+        else {
+          setMatchPopup(current.title);
+          setTimeout(() => {
+            setMatchPopup(null);
+            loadNext();
+          }, 2500);
+        }
       } else {
         loadNext();
       }
@@ -406,6 +414,21 @@ export default function Swipe() {
     );
   }
 
+  if (coachMatch) {
+    return (
+      <View style={styles.matchContainer}>
+        <CoachCard
+          visible
+          emoji="🎉"
+          title="It's a match!"
+          body="You both picked this — it's now in Plans. Head there, do it together, then tick it off. That's the whole game."
+          cta="Open Plans"
+          onPress={() => { setCoachMatch(false); router.push('/checklist'); }}
+        />
+      </View>
+    );
+  }
+
   if (matchPopup) {
     return (
       <View style={styles.matchContainer}>
@@ -444,7 +467,7 @@ export default function Swipe() {
   return (
     <View style={styles.container}>
       <View style={styles.nav}>
-        <TouchableOpacity style={styles.navSide} onPress={() => router.push('/checklist')}>
+        <TouchableOpacity style={styles.navSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.push('/checklist')}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={[styles.navItem, { textAlign: 'left' }]}>Plans</Text>
             {unread > 0 && <PulsingDot />}
@@ -466,7 +489,7 @@ export default function Swipe() {
             <Text style={styles.navTitleCaret}>⌄</Text>
           </Animated.View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navSide} onPress={() => router.push('/memories')}>
+        <TouchableOpacity style={styles.navSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.push('/memories')}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
             <Text style={[styles.navItem, { textAlign: 'right' }]}>Memories</Text>
             {unreadMem > 0 && <PulsingDot />}
@@ -719,6 +742,8 @@ const styles = StyleSheet.create({
   },
   navSide: {
     flex: 1,
+    alignSelf: 'stretch',
+    justifyContent: 'center',
   },
   navCenter: {
     flex: 1,

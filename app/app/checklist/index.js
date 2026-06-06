@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api } from '../../lib/api';
 import Paywall from '../../components/Paywall';
+import CoachCard from '../../components/CoachCard';
 
 export default function Checklist() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function Checklist() {
   const [customTagline, setCustomTagline] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [coachDone, setCoachDone] = useState(false);
 
   useEffect(() => {
     load();
@@ -36,7 +38,8 @@ export default function Checklist() {
 
   async function handleComplete(id) {
     try {
-      await api.complete(id);
+      const result = await api.complete(id);
+      if (result?.first_completion) setCoachDone(true);
       load();
     } catch (e) {
       if (e.premiumRequired) { setShowPaywall(true); return; }
@@ -227,8 +230,16 @@ export default function Checklist() {
 
   return (
     <View style={styles.container}>
+      <CoachCard
+        visible={coachDone}
+        emoji="✨"
+        title="Your first memory!"
+        body="Nice — done together. It just moved to Memories, where you can rate it ⭐ and look back anytime."
+        cta="See Memories"
+        onPress={() => { setCoachDone(false); router.push('/memories'); }}
+      />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerSide} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.headerSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.back()}>
           <Text style={[styles.back, { textAlign: 'left' }]}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Our Plans</Text>

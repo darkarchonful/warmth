@@ -61,7 +61,7 @@ export default function Memories() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerSide} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.headerSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.back()}>
           <Text style={[styles.back, { textAlign: 'left' }]}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Our Memories</Text>
