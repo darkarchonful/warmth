@@ -30,6 +30,7 @@ services:
       APPLE_BUNDLE_ID: ${APPLE_BUNDLE_ID:-com.dbtvault.warmth}
       DAILY_SWIPE_LIMIT: ${DAILY_SWIPE_LIMIT:-8}
       DISABLE_SWIPE_LIMIT: ${DISABLE_SWIPE_LIMIT:-1}
+      DEV_AUTH: ${DEV_AUTH:-1}
       JWT_SECRET: ${JWT_SECRET:-warmth_jwt_dev_secret_2026}
     ports:
       - "3001:3000"

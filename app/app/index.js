@@ -237,21 +237,23 @@ export default function Home() {
           />
         )}
 
-        <View style={styles.devBox}>
-          <Text style={styles.devLabel}>Dev Login</Text>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => devLogin('Alice', 'alice@test.com')}
-          >
-            <Text style={styles.buttonText}>Login as Alice</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { marginTop: 10 }]}
-            onPress={() => devLogin('Bob', 'bob@test.com')}
-          >
-            <Text style={styles.buttonText}>Login as Bob</Text>
-          </TouchableOpacity>
-        </View>
+        {__DEV__ && (
+          <View style={styles.devBox}>
+            <Text style={styles.devLabel}>Dev Login</Text>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => devLogin('Alice', 'alice@test.com')}
+            >
+              <Text style={styles.buttonText}>Login as Alice</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, { marginTop: 10 }]}
+              onPress={() => devLogin('Bob', 'bob@test.com')}
+            >
+              <Text style={styles.buttonText}>Login as Bob</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     );
   }
