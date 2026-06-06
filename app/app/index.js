@@ -337,7 +337,8 @@ export default function Home() {
           <Text style={styles.subtitle}>Pair with your partner</Text>
 
           <TouchableOpacity
-            style={{ position: 'absolute', top: 50, right: 20 }}
+            style={{ position: 'absolute', top: 76, right: 20, justifyContent: 'center' }}
+            hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }}
             onPress={async () => { await clearToken(); setUser(null); setCouple(null); setMyInvite(''); }}
           >
             <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '500' }}>Logout</Text>
