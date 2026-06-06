@@ -84,6 +84,20 @@ spec:
                 secretKeyRef:
                   name: warmth-secrets
                   key: google-ios-client-id
+            # Passwordless email login (sends 6-digit codes via Gmail SMTP).
+            - name: SMTP_HOST
+              value: "smtp.gmail.com"
+            - name: SMTP_PORT
+              value: "587"
+            - name: SMTP_USER
+              value: "darkarchonful@gmail.com"
+            - name: MAIL_FROM
+              value: "Warmth <darkarchonful@gmail.com>"
+            - name: SMTP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: warmth-secrets
+                  key: smtp-pass
           ports:
             - containerPort: 3000
           resources:

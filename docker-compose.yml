@@ -32,6 +32,11 @@ services:
       DISABLE_SWIPE_LIMIT: ${DISABLE_SWIPE_LIMIT:-1}
       DEV_AUTH: ${DEV_AUTH:-1}
       JWT_SECRET: ${JWT_SECRET:-warmth_jwt_dev_secret_2026}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-Warmth <darkarchonful@gmail.com>}
     ports:
       - "3001:3000"
     depends_on:
