@@ -407,7 +407,7 @@ app.get('/me', auth, async (req, res) => {
   captureTimezone(req);
   captureNotifPermission(req);
   const user = await pool.query(
-    'SELECT id, email, name, avatar_url, name_confirmed, timezone, notif_permission, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
+    'SELECT id, email, name, avatar_url, name_confirmed, intro_seen, timezone, notif_permission, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
     [req.user.id]
   );
   const couple = await pool.query(
@@ -461,6 +461,13 @@ app.patch('/me', auth, async (req, res) => {
     [req.user.id, raw]
   );
   res.json({ user: result.rows[0] });
+});
+
+// Mark the one-time "first card" intro as seen. Idempotent — fired the first
+// time a freshly-paired user lands on the swipe deck, before the first card.
+app.post('/me/intro-seen', auth, async (req, res) => {
+  await pool.query('UPDATE users SET intro_seen = TRUE WHERE id = $1', [req.user.id]);
+  res.json({ ok: true });
 });
 
 // Delete account: wipes the user and any couple they belong to (with all

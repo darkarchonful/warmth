@@ -87,6 +87,7 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify({ name }),
   }),
+  markIntroSeen: () => request('/me/intro-seen', { method: 'POST' }),
   deleteAccount: () => request('/me', { method: 'DELETE' }),
 
   // Couple

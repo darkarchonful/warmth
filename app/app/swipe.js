@@ -57,6 +57,8 @@ export default function Swipe() {
   const [previewImages, setPreviewImages] = useState([]);
   const [matchPopup, setMatchPopup] = useState(null);
   const [coachMatch, setCoachMatch] = useState(false);
+  const [showIntro, setShowIntro] = useState(false);
+  const introHandledRef = useRef(false);
   const [done, setDone] = useState(false);
   const [backendVersion, setBackendVersion] = useState('');
   const [unread, setUnread] = useState(0);
@@ -119,6 +121,13 @@ export default function Swipe() {
       setUnread(d.unreadCount || 0);
       setUnreadMem(d.unreadMemories || 0);
       setPartnerName(d.couple?.partner_name || '');
+      // One-time intro, shown the first time a freshly-paired user reaches the
+      // deck (before the first card). introHandledRef guards against the 5s
+      // poll re-opening it before the server flag round-trips.
+      if (!introHandledRef.current && d.user && d.user.intro_seen === false) {
+        introHandledRef.current = true;
+        setShowIntro(true);
+      }
     }).catch(() => {});
     tick();
     const id = setInterval(tick, 5000);
@@ -259,6 +268,11 @@ export default function Swipe() {
     }
   }
 
+  function dismissIntro() {
+    setShowIntro(false);
+    api.markIntroSeen().catch(() => {});
+  }
+
   async function submitCustom() {
     const title = customTitle.trim();
     if (!title) return;
@@ -358,6 +372,21 @@ export default function Swipe() {
     outputRange: [1, 0],
     extrapolate: 'clamp',
   });
+
+  if (showIntro) {
+    return (
+      <View style={styles.matchContainer}>
+        <CoachCard
+          visible
+          emoji="💛"
+          title="Find what you both love"
+          body="Swipe through little things to do together. When you both pick the same one, it becomes a shared plan — something to actually go do."
+          cta="Let's start"
+          onPress={dismissIntro}
+        />
+      </View>
+    );
+  }
 
   if (blocked) {
     const isComeBack = previewImages.length > 0;
