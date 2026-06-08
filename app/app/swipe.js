@@ -622,14 +622,9 @@ export default function Swipe() {
       </Animated.View>
 
       {activity.__intro ? (
-        <View style={styles.buttons}>
-          <TouchableOpacity
-            style={[styles.swipeBtn, styles.loveBtn]}
-            onPress={() => flyOff(true)}
-          >
-            <Text style={styles.loveText}>Start →</Text>
-          </TouchableOpacity>
-        </View>
+        // Intro is swipe-only — no button. The on-card "Swipe right to begin"
+        // hint is the prompt. Empty spacer keeps the card vertically centered.
+        <View style={styles.buttons} />
       ) : activity.__prompt ? (
         <View style={styles.buttons}>
           <TouchableOpacity
