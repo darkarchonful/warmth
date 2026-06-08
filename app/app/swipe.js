@@ -57,8 +57,8 @@ export default function Swipe() {
   const [previewImages, setPreviewImages] = useState([]);
   const [matchPopup, setMatchPopup] = useState(null);
   const [coachMatch, setCoachMatch] = useState(false);
-  const [showIntro, setShowIntro] = useState(false);
   const introHandledRef = useRef(false);
+  const bootedRef = useRef(false);
   const [done, setDone] = useState(false);
   const [backendVersion, setBackendVersion] = useState('');
   const [unread, setUnread] = useState(0);
@@ -116,19 +116,32 @@ export default function Swipe() {
   }, []);
 
   useFocusEffect(useCallback(() => {
-    loadNext();
+    bootedRef.current = false;
     const tick = () => api.me().then(d => {
       setUnread(d.unreadCount || 0);
       setUnreadMem(d.unreadMemories || 0);
       setPartnerName(d.couple?.partner_name || '');
-      // One-time intro, shown the first time a freshly-paired user reaches the
-      // deck (before the first card). introHandledRef guards against the 5s
-      // poll re-opening it before the server flag round-trips.
-      if (!introHandledRef.current && d.user && d.user.intro_seen === false) {
-        introHandledRef.current = true;
-        setShowIntro(true);
+      // First /me of this focus decides what the deck opens with. A brand-new
+      // paired user (intro_seen === false) gets a one-time intro card injected
+      // at the front — swiped right to reveal the real deck. introHandledRef is
+      // never reset, so a late poll (before the server flag round-trips) can't
+      // re-show it.
+      if (!bootedRef.current) {
+        bootedRef.current = true;
+        if (!introHandledRef.current && d.user && d.user.intro_seen === false) {
+          introHandledRef.current = true;
+          pan.setValue({ x: 0, y: 0 });
+          setBlocked(false);
+          setDone(false);
+          setActivity({ __intro: true, id: 'intro-' + Date.now() });
+        } else {
+          loadNext();
+        }
       }
-    }).catch(() => {});
+    }).catch(() => {
+      // If /me fails on boot, don't strand the screen — load the deck anyway.
+      if (!bootedRef.current) { bootedRef.current = true; loadNext(); }
+    });
     tick();
     const id = setInterval(tick, 5000);
     return () => clearInterval(id);
@@ -227,6 +240,13 @@ export default function Swipe() {
   async function handleSwipe(liked) {
     const current = activityRef.current;
     if (!current) return;
+    if (current.__intro) {
+      // Intro card: a right swipe (or the Start button) dismisses it, records
+      // the per-user flag, and pulls in the first real activity.
+      api.markIntroSeen().catch(() => {});
+      loadNext();
+      return;
+    }
     if (current.__prompt) {
       // Prompt cards are non-swipeable; user interacts via the on-card button
       // or the Skip link. This branch should not normally be hit.
@@ -266,11 +286,6 @@ export default function Swipe() {
     } catch (e) {
       console.error(e);
     }
-  }
-
-  function dismissIntro() {
-    setShowIntro(false);
-    api.markIntroSeen().catch(() => {});
   }
 
   async function submitCustom() {
@@ -347,9 +362,12 @@ export default function Swipe() {
       onPanResponderTerminationRequest: () => true,
       onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
       onPanResponderRelease: (_, g) => {
+        // Intro card only goes one way — right means "begin". A left drag has
+        // nothing to skip, so it springs back.
+        const isIntro = activityRef.current?.__intro;
         if (g.dx > SWIPE_THRESHOLD) {
           flyOff(true);
-        } else if (g.dx < -SWIPE_THRESHOLD) {
+        } else if (g.dx < -SWIPE_THRESHOLD && !isIntro) {
           flyOff(false);
         } else {
           Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
@@ -372,21 +390,6 @@ export default function Swipe() {
     outputRange: [1, 0],
     extrapolate: 'clamp',
   });
-
-  if (showIntro) {
-    return (
-      <View style={styles.matchContainer}>
-        <CoachCard
-          visible
-          emoji="💛"
-          title="Find what you both love"
-          body="Swipe through little things to do together. When you both pick the same one, it becomes a shared plan — something to actually go do."
-          cta="Let's start"
-          onPress={dismissIntro}
-        />
-      </View>
-    );
-  }
 
   if (blocked) {
     const isComeBack = previewImages.length > 0;
@@ -513,11 +516,21 @@ export default function Swipe() {
         {...panResponder.panHandlers}
         style={[
           styles.card,
-          activity.__prompt && styles.promptCard,
+          (activity.__prompt || activity.__intro) && styles.promptCard,
           { transform: [{ translateX: pan.x }, { translateY: pan.y }, { rotate }] },
         ]}
       >
-        {activity.__prompt ? (
+        {activity.__intro ? (
+          <View style={styles.promptInner}>
+            <Text style={styles.promptHeart}>💛</Text>
+            <Text style={styles.promptTitle}>Find what you both love</Text>
+            <Text style={styles.promptTagline}>
+              Little things to do together. When you both pick the same one, it
+              becomes a shared plan — something to actually go do.
+            </Text>
+            <Text style={styles.introHint}>Swipe right to begin →</Text>
+          </View>
+        ) : activity.__prompt ? (
           <View style={styles.promptInner}>
             <Text style={styles.promptHeart}>💛</Text>
             <Text style={styles.promptTitle}>
@@ -597,16 +610,27 @@ export default function Swipe() {
         {!activity.__prompt && (
           <>
             <Animated.View style={[styles.overlay, styles.likeOverlay, { opacity: likeOpacity }]}>
-              <Text style={styles.likeText}>LOVE</Text>
+              <Text style={styles.likeText}>{activity.__intro ? "LET'S GO" : 'LOVE'}</Text>
             </Animated.View>
-            <Animated.View style={[styles.overlay, styles.skipOverlay, { opacity: skipOpacity }]}>
-              <Text style={styles.skipOverlayText}>SKIP</Text>
-            </Animated.View>
+            {!activity.__intro && (
+              <Animated.View style={[styles.overlay, styles.skipOverlay, { opacity: skipOpacity }]}>
+                <Text style={styles.skipOverlayText}>SKIP</Text>
+              </Animated.View>
+            )}
           </>
         )}
       </Animated.View>
 
-      {activity.__prompt ? (
+      {activity.__intro ? (
+        <View style={styles.buttons}>
+          <TouchableOpacity
+            style={[styles.swipeBtn, styles.loveBtn]}
+            onPress={() => flyOff(true)}
+          >
+            <Text style={styles.loveText}>Start →</Text>
+          </TouchableOpacity>
+        </View>
+      ) : activity.__prompt ? (
         <View style={styles.buttons}>
           <TouchableOpacity
             style={styles.promptSkipLink}
@@ -965,6 +989,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '500',
+  },
+  introHint: {
+    fontSize: 14,
+    color: colors.accent,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    textAlign: 'center',
   },
   promptSkipLink: {
     alignSelf: 'center',
