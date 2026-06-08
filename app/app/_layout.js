@@ -5,10 +5,22 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
+import { setUnauthorizedHandler, clearToken } from '../lib/api';
 
 export default function RootLayout() {
   const router = useRouter();
   const handled = useRef(new Set());
+
+  // Self-heal dead sessions app-wide: any request that 401s with a token in
+  // hand clears the session and drops to login, even from screens whose polls
+  // swallow their own errors.
+  useEffect(() => {
+    setUnauthorizedHandler(async () => {
+      await clearToken();
+      router.replace('/');
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   useEffect(() => {
     function handleResponse(response) {
