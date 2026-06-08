@@ -82,14 +82,26 @@ async function upsertEmailUser(email) {
 }
 
 // Auth middleware
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'No token' });
+  let payload;
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
+    payload = jwt.verify(token, JWT_SECRET);
   } catch {
-    res.status(401).json({ error: 'Invalid token' });
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+  // A valid JWT can still belong to a user that no longer exists (e.g. account
+  // deleted, or wiped during testing). Reject those with 401 so the app logs
+  // out cleanly instead of carrying a dead session into endpoints that FK to
+  // users and fail.
+  try {
+    const { rows } = await pool.query('SELECT 1 FROM users WHERE id = $1', [payload.id]);
+    if (!rows[0]) return res.status(401).json({ error: 'User not found' });
+    req.user = payload;
+    next();
+  } catch (e) {
+    res.status(500).json({ error: 'auth check failed' });
   }
 }
 
@@ -1651,13 +1663,18 @@ app.post('/push/register', auth, async (req, res) => {
   if (!token || typeof token !== 'string') {
     return res.status(400).json({ error: 'token required' });
   }
-  await pool.query(
-    `INSERT INTO push_tokens (user_id, token, platform)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (token) DO UPDATE SET user_id = $1, platform = $3, updated_at = NOW()`,
-    [req.user.id, token, platform || null]
-  );
-  res.json({ ok: true });
+  try {
+    await pool.query(
+      `INSERT INTO push_tokens (user_id, token, platform)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (token) DO UPDATE SET user_id = $1, platform = $3, updated_at = NOW()`,
+      [req.user.id, token, platform || null]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[push/register]', e.message);
+    res.status(500).json({ error: 'could not register token' });
+  }
 });
 
 // Health check
@@ -1668,6 +1685,13 @@ app.get('/health', async (req, res) => {
   } catch {
     res.status(500).json({ status: 'db error' });
   }
+});
+
+// Last-resort backstop: an unhandled rejection (e.g. a route that awaits a
+// query without a try/catch) would otherwise crash the whole process and 502
+// every request. Log it loudly and keep serving instead of dying.
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
 });
 
 const PORT = process.env.PORT || 3000;
