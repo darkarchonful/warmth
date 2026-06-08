@@ -6,6 +6,16 @@ export const API_URL =
 
 let token = null;
 
+// Registered once by the root layout. Fired when a request that carried a
+// session token comes back 401 — i.e. the session is genuinely dead (token
+// expired, or the user was deleted server-side). Lets any screen self-heal:
+// the handler clears the token and routes to login, so background polls that
+// swallow their own errors no longer strand the user on a stale screen.
+let onUnauthorized = null;
+export function setUnauthorizedHandler(fn) {
+  onUnauthorized = fn;
+}
+
 // Latest known OS notification-permission status, set by registerForPush().
 // Sent on requests as X-Notif-Permission so the server can record who's
 // reachable by push (persisted only on /me). Null until first read.
@@ -50,6 +60,14 @@ async function request(path, options = {}) {
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { error: `HTTP ${res.status}` }; }
   if (!res.ok) {
+    // A 401 on a request that carried a token means the session is dead. Fire
+    // the global handler (clear token + go to login) BEFORE throwing, so even
+    // callers that swallow the error — e.g. the deck's 5s /me poll — still get
+    // logged out. Guarded on `token` so failed login attempts (no token yet)
+    // don't trigger it, and so it only fires once (clearToken nulls the token).
+    if (res.status === 401 && token && onUnauthorized) {
+      onUnauthorized();
+    }
     // Attach the HTTP status so callers can distinguish a genuine 401 (token
     // invalid -> log out) from a transient network/5xx error (-> retry). Without
     // this, init()/loadMe treat every failure — including a clean 401 — as a
