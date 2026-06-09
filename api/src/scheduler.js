@@ -168,7 +168,8 @@ async function asymmetryNudge() {
 
 // ---------------------------------------------------------------------------
 // D1 — Stale plan nudge. A plan both partners approved but still haven't marked
-// done 3 days later. The Warmth bot drops a card-specific line into that plan's
+// done (2 days for a couple's first plan, 3 days after that). The Warmth bot
+// drops a card-specific line into that plan's
 // comment thread and pushes both partners a notification linking to the chat.
 // Fires once per plan — guarded by "no Warmth-bot comment on this plan yet", so
 // it's naturally idempotent across hourly runs and never nags twice. Posted
@@ -196,7 +197,14 @@ async function stalePlanNudge() {
     JOIN activities a ON a.id = cl.activity_id
     WHERE cl.status = 'approved'
       AND cl.parent_checklist_id IS NULL
-      AND cl.approved_at < now() - interval '3 days'
+      -- The couple's very first plan nudges after 2 days (build the habit
+      -- early); every plan after that waits the full 3. "First" = the lowest-id
+      -- top-level plan for the couple.
+      AND cl.approved_at < now() - (
+        CASE WHEN cl.id = (SELECT min(id) FROM checklist
+                           WHERE couple_id = c.id AND parent_checklist_id IS NULL)
+             THEN interval '2 days' ELSE interval '3 days' END
+      )
       AND NOT EXISTS (
         SELECT 1 FROM comments cm
         WHERE cm.parent_type = 'plan' AND cm.parent_id = cl.id AND cm.user_id = $1
