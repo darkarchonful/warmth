@@ -6,7 +6,6 @@ const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const appleSignin = require('apple-signin-auth');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 const { sendPush } = require('./push');
 
 const app = express();
@@ -37,21 +36,30 @@ function generateInviteCode() {
 }
 
 // --- Passwordless email login ----------------------------------------------
-// SMTP transport, built lazily so the server still boots if mail isn't
-// configured (email login simply 503s; Google/Apple keep working).
-let mailer = null;
-function getMailer() {
-  if (mailer) return mailer;
-  if (!process.env.SMTP_HOST) return null;
-  mailer = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: Number(process.env.SMTP_PORT) === 465, // 587 uses STARTTLS (false)
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+// Login codes go out over Resend's HTTPS API (port 443). Plain SMTP is a
+// non-starter from here: Hetzner blocks outbound 25/465/587, so any nodemailer
+// transport just times out inside the cluster. Resend's REST endpoint rides
+// 443, which is open. Email login is gated on RESEND_API_KEY being set — when
+// it's absent the endpoint 503s and Google/Apple sign-in keep working.
+const MAIL_FROM = process.env.MAIL_FROM || 'Warmth <noreply@warmth.dbtvault-solutions.tech>';
+
+// Send one transactional email via Resend. Resolves on success; throws on any
+// non-2xx so the caller can surface a 502. Callers must check RESEND_API_KEY
+// first (no key -> 503 "unavailable", not a failed send).
+async function sendEmail({ to, subject, text }) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from: MAIL_FROM, to, subject, text }),
   });
-  return mailer;
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Resend ${res.status}: ${detail.slice(0, 200)}`);
+  }
 }
-const MAIL_FROM = process.env.MAIL_FROM || `Warmth <${process.env.SMTP_USER}>`;
 
 function hashCode(code) {
   return crypto.createHash('sha256').update(String(code)).digest('hex');
@@ -324,8 +332,7 @@ app.post('/auth/email/request', async (req, res) => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email' });
 
-  const transport = getMailer();
-  if (!transport) return res.status(503).json({ error: 'Email login is unavailable' });
+  if (!process.env.RESEND_API_KEY) return res.status(503).json({ error: 'Email login is unavailable' });
 
   // Throttle resends.
   const existing = await pool.query(
@@ -352,8 +359,7 @@ app.post('/auth/email/request', async (req, res) => {
   );
 
   try {
-    await transport.sendMail({
-      from: MAIL_FROM,
+    await sendEmail({
       to: email,
       subject: `${code} is your Warmth code`,
       text: `Your Warmth login code is ${code}\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.`,

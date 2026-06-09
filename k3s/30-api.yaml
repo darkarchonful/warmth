@@ -84,20 +84,16 @@ spec:
                 secretKeyRef:
                   name: warmth-secrets
                   key: google-ios-client-id
-            # Passwordless email login (sends 6-digit codes via Gmail SMTP).
-            - name: SMTP_HOST
-              value: "smtp.gmail.com"
-            - name: SMTP_PORT
-              value: "587"
-            - name: SMTP_USER
-              value: "darkarchonful@gmail.com"
+            # Passwordless email login: 6-digit codes sent via Resend's HTTPS
+            # API (Hetzner blocks outbound SMTP, so nodemailer/Gmail can't work
+            # from the cluster). Branded sender on a dedicated subdomain.
             - name: MAIL_FROM
-              value: "Warmth <darkarchonful@gmail.com>"
-            - name: SMTP_PASS
+              value: "Warmth <noreply@warmth.dbtvault-solutions.tech>"
+            - name: RESEND_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: warmth-secrets
-                  key: smtp-pass
+                  key: resend-api-key
           ports:
             - containerPort: 3000
           resources:
