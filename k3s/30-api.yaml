@@ -50,13 +50,13 @@ spec:
           - 8.8.8.8
       containers:
         - name: api
-          image: ghcr.io/darkarchonful/warmth-api:v22
+          image: ghcr.io/darkarchonful/warmth-api:v26
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
             - name: APP_VERSION
-              value: "v22"
+              value: "v26"
             - name: APPLE_BUNDLE_ID
               value: "com.dbtvault.warmth"
             # TODO: remove before public launch — testing bypass for daily cap
@@ -84,20 +84,16 @@ spec:
                 secretKeyRef:
                   name: warmth-secrets
                   key: google-ios-client-id
-            # Passwordless email login (sends 6-digit codes via Gmail SMTP).
-            - name: SMTP_HOST
-              value: "smtp.gmail.com"
-            - name: SMTP_PORT
-              value: "587"
-            - name: SMTP_USER
-              value: "darkarchonful@gmail.com"
+            # Passwordless email login: 6-digit codes sent via Resend's HTTPS
+            # API (Hetzner blocks outbound SMTP, so nodemailer/Gmail can't work
+            # from the cluster). Branded sender on a dedicated subdomain.
             - name: MAIL_FROM
-              value: "Warmth <darkarchonful@gmail.com>"
-            - name: SMTP_PASS
+              value: "Warmth <noreply@warmth.dbtvault-solutions.tech>"
+            - name: RESEND_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: warmth-secrets
-                  key: smtp-pass
+                  key: resend-api-key
           ports:
             - containerPort: 3000
           resources:

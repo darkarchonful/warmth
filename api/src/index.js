@@ -6,7 +6,6 @@ const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const appleSignin = require('apple-signin-auth');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 const { sendPush } = require('./push');
 
 const app = express();
@@ -53,21 +52,30 @@ function generateInviteCode() {
 }
 
 // --- Passwordless email login ----------------------------------------------
-// SMTP transport, built lazily so the server still boots if mail isn't
-// configured (email login simply 503s; Google/Apple keep working).
-let mailer = null;
-function getMailer() {
-  if (mailer) return mailer;
-  if (!process.env.SMTP_HOST) return null;
-  mailer = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: Number(process.env.SMTP_PORT) === 465, // 587 uses STARTTLS (false)
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+// Login codes go out over Resend's HTTPS API (port 443). Plain SMTP is a
+// non-starter from here: Hetzner blocks outbound 25/465/587, so any nodemailer
+// transport just times out inside the cluster. Resend's REST endpoint rides
+// 443, which is open. Email login is gated on RESEND_API_KEY being set — when
+// it's absent the endpoint 503s and Google/Apple sign-in keep working.
+const MAIL_FROM = process.env.MAIL_FROM || 'Warmth <noreply@warmth.dbtvault-solutions.tech>';
+
+// Send one transactional email via Resend. Resolves on success; throws on any
+// non-2xx so the caller can surface a 502. Callers must check RESEND_API_KEY
+// first (no key -> 503 "unavailable", not a failed send).
+async function sendEmail({ to, subject, text }) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from: MAIL_FROM, to, subject, text }),
   });
-  return mailer;
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Resend ${res.status}: ${detail.slice(0, 200)}`);
+  }
 }
-const MAIL_FROM = process.env.MAIL_FROM || `Warmth <${process.env.SMTP_USER}>`;
 
 function hashCode(code) {
   return crypto.createHash('sha256').update(String(code)).digest('hex');
@@ -98,14 +106,26 @@ async function upsertEmailUser(email) {
 }
 
 // Auth middleware
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'No token' });
+  let payload;
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
+    payload = jwt.verify(token, JWT_SECRET);
   } catch {
-    res.status(401).json({ error: 'Invalid token' });
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+  // A valid JWT can still belong to a user that no longer exists (e.g. account
+  // deleted, or wiped during testing). Reject those with 401 so the app logs
+  // out cleanly instead of carrying a dead session into endpoints that FK to
+  // users and fail.
+  try {
+    const { rows } = await pool.query('SELECT 1 FROM users WHERE id = $1', [payload.id]);
+    if (!rows[0]) return res.status(401).json({ error: 'User not found' });
+    req.user = payload;
+    next();
+  } catch (e) {
+    res.status(500).json({ error: 'auth check failed' });
   }
 }
 
@@ -328,8 +348,7 @@ app.post('/auth/email/request', async (req, res) => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email' });
 
-  const transport = getMailer();
-  if (!transport) return res.status(503).json({ error: 'Email login is unavailable' });
+  if (!process.env.RESEND_API_KEY) return res.status(503).json({ error: 'Email login is unavailable' });
 
   // Throttle resends.
   const existing = await pool.query(
@@ -356,8 +375,7 @@ app.post('/auth/email/request', async (req, res) => {
   );
 
   try {
-    await transport.sendMail({
-      from: MAIL_FROM,
+    await sendEmail({
       to: email,
       subject: `${code} is your Warmth code`,
       text: `Your Warmth login code is ${code}\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.`,
@@ -423,7 +441,7 @@ app.get('/me', auth, async (req, res) => {
   captureTimezone(req);
   captureNotifPermission(req);
   const user = await pool.query(
-    'SELECT id, email, name, avatar_url, name_confirmed, timezone, notif_permission, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
+    'SELECT id, email, name, avatar_url, name_confirmed, intro_seen, timezone, notif_permission, last_checklist_viewed_at, last_memories_viewed_at FROM users WHERE id = $1',
     [req.user.id]
   );
   const couple = await pool.query(
@@ -551,6 +569,13 @@ app.post('/premium/restore', auth, async (req, res) => {
   if (!cid) return res.status(400).json({ error: 'Not in a couple' });
   const c = (await pool.query('SELECT is_premium, premium_expires_at FROM couples WHERE id = $1', [cid])).rows[0];
   res.json({ premium: isCouplePremium(c) });
+});
+
+// Mark the one-time "first card" intro as seen. Idempotent — fired the first
+// time a freshly-paired user lands on the swipe deck, before the first card.
+app.post('/me/intro-seen', auth, async (req, res) => {
+  await pool.query('UPDATE users SET intro_seen = TRUE WHERE id = $1', [req.user.id]);
+  res.json({ ok: true });
 });
 
 // Delete account: wipes the user and any couple they belong to (with all
@@ -1754,13 +1779,18 @@ app.post('/push/register', auth, async (req, res) => {
   if (!token || typeof token !== 'string') {
     return res.status(400).json({ error: 'token required' });
   }
-  await pool.query(
-    `INSERT INTO push_tokens (user_id, token, platform)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (token) DO UPDATE SET user_id = $1, platform = $3, updated_at = NOW()`,
-    [req.user.id, token, platform || null]
-  );
-  res.json({ ok: true });
+  try {
+    await pool.query(
+      `INSERT INTO push_tokens (user_id, token, platform)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (token) DO UPDATE SET user_id = $1, platform = $3, updated_at = NOW()`,
+      [req.user.id, token, platform || null]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[push/register]', e.message);
+    res.status(500).json({ error: 'could not register token' });
+  }
 });
 
 // Health check
@@ -1771,6 +1801,13 @@ app.get('/health', async (req, res) => {
   } catch {
     res.status(500).json({ status: 'db error' });
   }
+});
+
+// Last-resort backstop: an unhandled rejection (e.g. a route that awaits a
+// query without a try/catch) would otherwise crash the whole process and 502
+// every request. Log it loudly and keep serving instead of dying.
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
 });
 
 const PORT = process.env.PORT || 3000;

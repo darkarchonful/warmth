@@ -166,10 +166,84 @@ async function asymmetryNudge() {
   return { rule: 'B4 asymmetry', candidates: rows.length, sent };
 }
 
+// ---------------------------------------------------------------------------
+// D1 — Stale plan nudge. A plan both partners approved but still haven't marked
+// done (2 days for a couple's first plan, 3 days after that). The Warmth bot
+// drops a card-specific line into that plan's
+// comment thread and pushes both partners a notification linking to the chat.
+// Fires once per plan — guarded by "no Warmth-bot comment on this plan yet", so
+// it's naturally idempotent across hourly runs and never nags twice. Posted
+// only when it's ~local evening for at least one partner, so the push isn't a
+// 3am ping. Auto-spawned journey sub-steps (parent_checklist_id NOT NULL) are
+// skipped — only the top-level plan the couple actually swiped on gets nudged.
+//
+// Unlike the B/C rules this doesn't go through claim()/notifications_log: the
+// posted comment IS the dedup ledger (the NOT EXISTS guard), and the push is
+// best-effort on top. The bot user id is looked up by its reserved email.
+// ---------------------------------------------------------------------------
+async function stalePlanNudge() {
+  const bot = await pool.query("SELECT id FROM users WHERE email = 'bot@warmth.internal'");
+  if (!bot.rows[0]) return { rule: 'D1 stale_plan', candidates: 0, posted: 0, note: 'no bot user' };
+  const botId = bot.rows[0].id;
+
+  const { rows } = await pool.query(`
+    SELECT cl.id AS plan_id, c.user_a_id, c.user_b_id,
+           COALESCE(
+             a.nudge_text,
+             'You both said yes to ' || a.title || ' a few days ago — don''t be shy, pick a time 💛'
+           ) AS msg
+    FROM checklist cl
+    JOIN couples c    ON c.id = cl.couple_id AND c.active AND c.user_b_id IS NOT NULL
+    JOIN activities a ON a.id = cl.activity_id
+    WHERE cl.status = 'approved'
+      AND cl.parent_checklist_id IS NULL
+      -- The couple's very first plan nudges after 2 days (build the habit
+      -- early); every plan after that waits the full 3. "First" = the lowest-id
+      -- top-level plan for the couple.
+      AND cl.approved_at < now() - (
+        CASE WHEN cl.id = (SELECT min(id) FROM checklist
+                           WHERE couple_id = c.id AND parent_checklist_id IS NULL)
+             THEN interval '2 days' ELSE interval '3 days' END
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM comments cm
+        WHERE cm.parent_type = 'plan' AND cm.parent_id = cl.id AND cm.user_id = $1
+      )
+      AND EXISTS (
+        SELECT 1 FROM users u
+        WHERE u.id IN (c.user_a_id, c.user_b_id)
+          AND u.timezone IS NOT NULL
+          AND EXTRACT(HOUR FROM (now() AT TIME ZONE u.timezone)) = 18
+      )
+  `, [botId]);
+
+  let posted = 0;
+  for (const r of rows) {
+    // Post the bot comment first — it's the idempotency guard, so even if the
+    // pushes below fail, the next run sees it and won't repost.
+    await pool.query(
+      "INSERT INTO comments (parent_type, parent_id, user_id, text) VALUES ('plan', $1, $2, $3)",
+      [r.plan_id, botId, r.msg]
+    );
+    // Bump the plan so both partners get the unread nav dot (don't touch
+    // last_comment_seen — it should read as unseen for both).
+    await pool.query('UPDATE checklist SET updated_at = now() WHERE id = $1', [r.plan_id]);
+    posted++;
+    for (const uid of [r.user_a_id, r.user_b_id]) {
+      try {
+        await sendPush(pool, uid, 'Warmth 💛', r.msg, { route: `/checklist/${r.plan_id}` });
+      } catch (e) {
+        console.error(`[scheduler] D1 push failed plan=${r.plan_id} user=${uid}:`, e.message);
+      }
+    }
+  }
+  return { rule: 'D1 stale_plan', candidates: rows.length, posted };
+}
+
 async function main() {
   const started = new Date().toISOString();
   const results = [];
-  for (const rule of [weekendPrompt, onARoll, asymmetryNudge]) {
+  for (const rule of [weekendPrompt, onARoll, asymmetryNudge, stalePlanNudge]) {
     try {
       results.push(await rule());
     } catch (e) {
