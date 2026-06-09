@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, API_URL } from '../../lib/api';
@@ -17,10 +17,11 @@ export default function MemoryDetail() {
   const [meId, setMeId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
+  const [loading, setLoading] = useState(true);
 
   async function reload() {
     const list = await api.getMemories();
-    const found = list.find(x => x.id.toString() === id);
+    const found = list.find(x => x.id.toString() === id) || null;
     setItem(found);
     if (found) setNoteDraft(found.you_note || '');
   }
@@ -32,6 +33,7 @@ export default function MemoryDetail() {
         setMeId(me.user.id);
         await reload();
       } catch {}
+      finally { setLoading(false); }
     })();
   }, [id]);
 
@@ -66,11 +68,28 @@ export default function MemoryDetail() {
     setBusy(false);
   }
 
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  // Not in the memories list: removed, or a stale deep link (e.g. a notification
+  // for a memory from an old pairing). Don't dead-end on a blank screen.
   if (!item) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}><Text style={styles.back}>Back</Text></TouchableOpacity>
+          <TouchableOpacity style={{ flex: 1 }} onPress={() => router.back()}><Text style={styles.back}>Back</Text></TouchableOpacity>
+        </View>
+        <View style={styles.centered}>
+          <Text style={styles.goneTitle}>This memory isn't here anymore</Text>
+          <Text style={styles.goneBody}>It may have been removed.</Text>
+          <TouchableOpacity style={styles.goneBtn} onPress={() => router.replace('/swipe')}>
+            <Text style={styles.goneBtnText}>Back to your deck</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -273,4 +292,9 @@ const styles = StyleSheet.create({
   },
   repeatPendingText: { fontSize: 13, color: colors.textLight, fontStyle: 'italic', flex: 1 },
   repeatCancelLink: { color: colors.accent, fontSize: 13, fontWeight: '500', marginLeft: 8 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  goneTitle: { fontSize: 18, color: colors.text, fontWeight: '500', textAlign: 'center', marginBottom: 8 },
+  goneBody: { fontSize: 14, color: colors.textLight, textAlign: 'center', marginBottom: 24 },
+  goneBtn: { backgroundColor: colors.accent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 },
+  goneBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });
