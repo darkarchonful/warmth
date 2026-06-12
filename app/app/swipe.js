@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, PanResponder, Image, Alert, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, Easing, PanResponder, Image, Alert, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { PinchGestureHandler, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../lib/colors';
@@ -100,6 +100,31 @@ export default function Swipe() {
     revealOpacity.setValue(0);
     Animated.timing(revealOpacity, { toValue: 1, duration: 2500, useNativeDriver: true }).start();
   }, [activity?.id]);
+
+  // Ken Burns drift: the photo breathes — a slow zoom + pan loop so the scene
+  // feels alive and holds the eye. Base scale stays >= 1.04 so the pan (which
+  // grows with the zoom) never exposes an edge inside the clipped card.
+  const driftProgress = useRef(new Animated.Value(0)).current;
+  const driftLoopRef = useRef(null);
+
+  useEffect(() => {
+    if (!activity) return;
+    driftLoopRef.current?.stop();
+    driftProgress.setValue(0);
+    driftLoopRef.current = Animated.loop(Animated.sequence([
+      Animated.timing(driftProgress, { toValue: 1, duration: 12000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(driftProgress, { toValue: 0, duration: 12000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ]));
+    driftLoopRef.current.start();
+    return () => driftLoopRef.current?.stop();
+  }, [activity?.id]);
+
+  // Alternate pan direction per card so consecutive swipes don't all glide the
+  // same way.
+  const driftDir = (activity?.id ?? 0) % 2 === 0 ? 1 : -1;
+  const driftScale = driftProgress.interpolate({ inputRange: [0, 1], outputRange: [1.04, 1.12] });
+  const driftTx = driftProgress.interpolate({ inputRange: [0, 1], outputRange: [0, 8 * driftDir] });
+  const driftTy = driftProgress.interpolate({ inputRange: [0, 1], outputRange: [0, -5] });
 
   useEffect(() => {
     activityRef.current = activity;
@@ -579,6 +604,9 @@ export default function Swipe() {
                             { translateX: zoomTx },
                             { translateY: zoomTy },
                             { scale: pinchScale },
+                            { translateX: driftTx },
+                            { translateY: driftTy },
+                            { scale: driftScale },
                           ],
                         },
                       ]}
