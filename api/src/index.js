@@ -603,26 +603,31 @@ app.post('/couple/join', auth, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Cannot pair with yourself' });
     }
-    // Cooldown after a break-up: same two people can't re-pair for 48h.
-    // Pairing with someone new is unaffected.
-    const prior = await client.query(
-      `SELECT ended_at FROM couples
-       WHERE user_b_id IS NOT NULL
-         AND ((user_a_id = $1 AND user_b_id = $2) OR (user_a_id = $2 AND user_b_id = $1))
-         AND ended_at IS NOT NULL
-       ORDER BY ended_at DESC LIMIT 1`,
-      [couple.rows[0].user_a_id, req.user.id]
-    );
-    if (prior.rows.length > 0) {
-      const endedAt = new Date(prior.rows[0].ended_at);
-      const hoursSince = (Date.now() - endedAt.getTime()) / 3600000;
-      if (hoursSince < 48) {
-        await client.query('ROLLBACK');
-        const hoursLeft = Math.ceil(48 - hoursSince);
-        const when = hoursLeft >= 24
-          ? `in about ${Math.ceil(hoursLeft / 24)} day${hoursLeft >= 48 ? 's' : ''}`
-          : `in ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}`;
-        return res.status(400).json({ error: `Give it a moment — you two can reconnect ${when}` });
+    // Cooldown after a break-up: same two people can't re-pair for N hours.
+    // Pairing with someone new is unaffected. Gated by REPAIR_COOLDOWN_HOURS —
+    // set to 0 (current default) to disable while testing / under App Review,
+    // where pair→unpair→re-pair must work freely. Restore (e.g. 48) post-launch.
+    const cooldownHours = Number(process.env.REPAIR_COOLDOWN_HOURS) || 0;
+    if (cooldownHours > 0) {
+      const prior = await client.query(
+        `SELECT ended_at FROM couples
+         WHERE user_b_id IS NOT NULL
+           AND ((user_a_id = $1 AND user_b_id = $2) OR (user_a_id = $2 AND user_b_id = $1))
+           AND ended_at IS NOT NULL
+         ORDER BY ended_at DESC LIMIT 1`,
+        [couple.rows[0].user_a_id, req.user.id]
+      );
+      if (prior.rows.length > 0) {
+        const endedAt = new Date(prior.rows[0].ended_at);
+        const hoursSince = (Date.now() - endedAt.getTime()) / 3600000;
+        if (hoursSince < cooldownHours) {
+          await client.query('ROLLBACK');
+          const hoursLeft = Math.ceil(cooldownHours - hoursSince);
+          const when = hoursLeft >= 24
+            ? `in about ${Math.ceil(hoursLeft / 24)} day${hoursLeft >= 48 ? 's' : ''}`
+            : `in ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}`;
+          return res.status(400).json({ error: `Give it a moment — you two can reconnect ${when}` });
+        }
       }
     }
     await client.query(
