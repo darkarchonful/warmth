@@ -72,6 +72,10 @@ function generateLoginCode() {
   return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 }
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// App Store review demo logins — comma-separated allowlist of emails that skip
+// email-code delivery and accept the fixed DEMO_CODE. Empty in normal prod.
+const DEMO_EMAILS = (process.env.DEMO_EMAIL || '')
+  .toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
 
 // Find-or-create a user from a verified email (the email-login path). The
 // emailed code proves inbox ownership, so an existing row with this email is
@@ -335,11 +339,12 @@ app.post('/auth/email/request', async (req, res) => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email' });
 
-  // App Store review demo account: no email is sent; the login code is fixed
+  // App Store review demo accounts: no email is sent; the login code is fixed
   // (DEMO_CODE, checked in /verify). Lets a reviewer sign in with no inbox
-  // access. No-op in production unless DEMO_EMAIL is configured.
-  const demoEmail = (process.env.DEMO_EMAIL || '').toLowerCase();
-  if (demoEmail && email === demoEmail) return res.json({ ok: true });
+  // access. DEMO_EMAIL is a comma-separated allowlist (e.g. the reviewer
+  // account + its partner, so matching can be tested across two devices).
+  // No-op in production unless DEMO_EMAIL is configured.
+  if (DEMO_EMAILS.includes(email)) return res.json({ ok: true });
 
   if (!process.env.RESEND_API_KEY) return res.status(503).json({ error: 'Email login is unavailable' });
 
@@ -389,10 +394,9 @@ app.post('/auth/email/verify', async (req, res) => {
     return res.status(400).json({ error: 'Invalid email or code' });
   }
 
-  // App Store review demo account: accept the fixed DEMO_CODE for DEMO_EMAIL.
-  // No-op in production unless both are configured.
-  const demoEmail = (process.env.DEMO_EMAIL || '').toLowerCase();
-  if (demoEmail && email === demoEmail && process.env.DEMO_CODE && code === process.env.DEMO_CODE) {
+  // App Store review demo accounts: accept the fixed DEMO_CODE for any email in
+  // the DEMO_EMAILS allowlist. No-op in production unless both are configured.
+  if (DEMO_EMAILS.includes(email) && process.env.DEMO_CODE && code === process.env.DEMO_CODE) {
     const user = await upsertEmailUser(email);
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
     return res.json({ token, user });

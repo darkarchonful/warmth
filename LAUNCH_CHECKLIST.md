@@ -40,9 +40,9 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - (depends on §1 Paid Apps Agreement + banking)
 
 ## 5. App Review prep  (common rejection points)
-- ⬜ **Demo account + pre-paired partner** (or detailed review notes) — reviewers can't test pairing otherwise
+- ✅ **Demo account + pre-paired partner** — `appreview@warmth.dbtvault-solutions.tech` / code `473829`, pre-paired with "Sam", seeded with 2 plans + 1 memory + a comment. Login bypass env-gated (API v30). Verified end-to-end.
 - ⬜ No placeholder content at review time (ties to §6 card images)
-- ⬜ Review notes explaining the couple-invite flow
+- ✅ **Review notes** — `docs/APP_REVIEW_NOTES.md` (paste into ASC App Review Information)
 - ✅ **Re-pair cooldown disabled for review** — 48h same-couple cooldown gated behind `REPAIR_COOLDOWN_HOURS` (default 0); reviewer can pair→unpair→re-pair freely. Restore to `48` post-launch (see §7).
 
 ## 6. App polish / content

@@ -35,6 +35,13 @@ Pairing in normal use is done by one partner sharing an invite code and the
 other entering it; since review is single-device, we have pre-paired the demo
 account so this step is not required.
 
+**Optional — testing the live match across two devices:** if you'd like to see
+two partners match in real time, you can sign in as the partner on a second
+device or simulator using the same Email method:
+- **Partner email:** `appreview.partner@warmth.dbtvault-solutions.tech`
+- **Login code:** `473829` (same fixed code)
+Like the same idea on both accounts and it appears as a shared Plan on each.
+
 No purchases are required to review the app. There is no user-generated public
 content and no ads or third-party tracking.
 
