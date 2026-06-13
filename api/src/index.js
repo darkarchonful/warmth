@@ -12,6 +12,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use('/images/activities', express.static(path.join(__dirname, '..', 'public', 'activities')));
+// Public privacy policy (App Store requires a reachable URL).
+app.get(['/privacy', '/privacy.html'], (req, res) =>
+  res.sendFile(path.join(__dirname, '..', 'public', 'privacy.html')));
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
