@@ -43,12 +43,14 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ⬜ **Demo account + pre-paired partner** (or detailed review notes) — reviewers can't test pairing otherwise
 - ⬜ No placeholder content at review time (ties to §6 card images)
 - ⬜ Review notes explaining the couple-invite flow
+- ✅ **Re-pair cooldown disabled for review** — 48h same-couple cooldown gated behind `REPAIR_COOLDOWN_HOURS` (default 0); reviewer can pair→unpair→re-pair freely. Restore to `48` post-launch (see §7).
 
 ## 6. App polish / content
 - ⬜ **Real card images** to replace emoji placeholders (flagged as pre-launch must)
 - ⬜ Final copy pass on cards / onboarding
 
 ## 7. Backend / infra hardening (from prod-gaps)
+- ⬜ **Restore re-pair cooldown post-launch** — set `REPAIR_COOLDOWN_HOURS: "48"` in `k3s/30-api.yaml` + re-apply (disabled at 0 for testing/review, code intact)
 - ⬜ TLS cert auto-renewal check (warmth-api + edge)
 - ⬜ CI/CD for API image build + deploy (currently manual docker build → kubectl)
 - ⬜ Basic observability (error logging/alerting on the API + scheduler)
