@@ -28,11 +28,12 @@ VALUES (
   (SELECT id FROM users WHERE email='appreview.partner@warmth.dbtvault-solutions.tech'),
   'DEMO001', NOW(), TRUE);
 
--- 3. Plans: two approved (both said yes), one matched (awaiting confirm).
+-- 3. Plans: keep UNDER the deck gate — 3+ non-done plans block swiping (see
+--    /activities/next). Seed ONE approved (both said yes) + ONE matched
+--    (awaiting confirm) = 2 open plans, so the reviewer can still swipe the deck.
 INSERT INTO checklist (couple_id, activity_id, status, approved_by_a, approved_by_b, approved_at, matched_at, updated_at)
 VALUES
-  ((SELECT id FROM couples WHERE invite_code='DEMO001'), 32, 'approved', TRUE, TRUE, NOW()-INTERVAL '1 day',  NOW()-INTERVAL '2 days', NOW()-INTERVAL '1 day'),
-  ((SELECT id FROM couples WHERE invite_code='DEMO001'), 9,  'approved', TRUE, TRUE, NOW()-INTERVAL '6 hours', NOW()-INTERVAL '1 day',  NOW()-INTERVAL '6 hours');
+  ((SELECT id FROM couples WHERE invite_code='DEMO001'), 32, 'approved', TRUE, TRUE, NOW()-INTERVAL '1 day',  NOW()-INTERVAL '2 days', NOW()-INTERVAL '1 day');
 
 INSERT INTO checklist (couple_id, activity_id, status, approved_by_a, approved_by_b, matched_at, updated_at)
 VALUES

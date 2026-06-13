@@ -23,9 +23,9 @@ needing a second person:
 
 - **Swipe deck** (home): swipe right to like an idea, left to pass. When both
   partners like the same idea it becomes a shared Plan.
-- **Plans:** two agreed plans ("Cook dinner together", "Watch the sunset
-  together") and one awaiting confirmation ("Movie night at home"). Open the
-  "Cook dinner together" plan to see the in-plan comment thread with the partner.
+- **Plans:** one agreed plan ("Cook dinner together") and one awaiting
+  confirmation ("Movie night at home"). Open the "Cook dinner together" plan to
+  see the in-plan comment thread with the partner.
 - **Memories:** one completed activity ("Morning coffee together") with both
   partners' ratings and notes.
 - **Account controls:** Settings (top of the deck) includes **unpair** and
@@ -46,7 +46,12 @@ Developer contact: darkarchonful@gmail.com
 ### Internal notes (do NOT paste into ASC)
 - Demo bypass is env-gated: `DEMO_EMAIL` + `DEMO_CODE` in `k3s/30-api.yaml`
   (API v30). Skips email send + accepts the fixed code. **Remove post-launch.**
-- Seed couple is id 66 (users 141 "Alex" / 142 "Sam"). Re-seed with
-  `/tmp/demo_seed.sql` (or commit it) if the data drifts before submission.
-- If the deck shows "no more activities", the demo account may have swiped
-  through; re-run the seed to reset swipes.
+- Re-seed any time with `scripts/demo_seed.sql` — it resets the demo couple's
+  swipes/plans/memories cleanly:
+  `kubectl -n warmth exec -i postgres-warmth-0 -- psql -U warmth -d warmth < scripts/demo_seed.sql`
+- IMPORTANT: seed keeps **2 open plans** on purpose — the deck blocks at **3+**
+  non-done plans (`/activities/next`). Don't add a third open plan or the
+  reviewer can't swipe.
+- The reviewer's own right-swipes won't create new plans (a match needs the
+  partner to also like the card), so the count stays at 2 during review.
+- If the deck ever shows "no more activities", re-run the seed to reset swipes.
