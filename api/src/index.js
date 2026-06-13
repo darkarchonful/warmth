@@ -12,9 +12,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use('/images/activities', express.static(path.join(__dirname, '..', 'public', 'activities')));
-// Public privacy policy (App Store requires a reachable URL).
+// Public privacy policy + support pages (App Store requires reachable URLs).
 app.get(['/privacy', '/privacy.html'], (req, res) =>
   res.sendFile(path.join(__dirname, '..', 'public', 'privacy.html')));
+app.get(['/support', '/support.html'], (req, res) =>
+  res.sendFile(path.join(__dirname, '..', 'public', 'support.html')));
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
