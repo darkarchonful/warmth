@@ -21,7 +21,7 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ⬜ Description, keywords, promotional text
 - ⬜ **Screenshots** for required device sizes (6.7" + 6.5" iPhone minimum)
 - ⬜ App icon 1024×1024
-- ⬜ **Privacy Policy URL** (mandatory) + Support URL + optional marketing URL
+- ✅ **Privacy Policy URL** — https://warmth-api.dbtvault-solutions.tech/privacy (live, v29) · ⬜ Support URL + optional marketing URL
 - ⬜ **App Privacy "nutrition label"** — declare collection of email, name, push token + usage
 - ⬜ Age rating questionnaire
 
