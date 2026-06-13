@@ -335,6 +335,12 @@ app.post('/auth/email/request', async (req, res) => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email' });
 
+  // App Store review demo account: no email is sent; the login code is fixed
+  // (DEMO_CODE, checked in /verify). Lets a reviewer sign in with no inbox
+  // access. No-op in production unless DEMO_EMAIL is configured.
+  const demoEmail = (process.env.DEMO_EMAIL || '').toLowerCase();
+  if (demoEmail && email === demoEmail) return res.json({ ok: true });
+
   if (!process.env.RESEND_API_KEY) return res.status(503).json({ error: 'Email login is unavailable' });
 
   // Throttle resends.
@@ -381,6 +387,15 @@ app.post('/auth/email/verify', async (req, res) => {
   const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
   if (!EMAIL_RE.test(email) || !/^\d{6}$/.test(code)) {
     return res.status(400).json({ error: 'Invalid email or code' });
+  }
+
+  // App Store review demo account: accept the fixed DEMO_CODE for DEMO_EMAIL.
+  // No-op in production unless both are configured.
+  const demoEmail = (process.env.DEMO_EMAIL || '').toLowerCase();
+  if (demoEmail && email === demoEmail && process.env.DEMO_CODE && code === process.env.DEMO_CODE) {
+    const user = await upsertEmailUser(email);
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+    return res.json({ token, user });
   }
 
   const row = await pool.query('SELECT code_hash, expires_at, attempts FROM email_login_codes WHERE email = $1', [email]);
