@@ -22,8 +22,8 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ✅ **App icon 1024×1024** — variant A (interlocking swirl), `app/assets/icon.png`, shipped in build 20
 - ✅ **Privacy Policy URL** — https://warmth-api.dbtvault-solutions.tech/privacy (live)
 - ✅ **Support URL** — https://warmth-api.dbtvault-solutions.tech/support (live, v32) · ⬜ optional marketing URL
-- ⬜ **App Privacy "nutrition label"** — declare collection of email, name, push token + usage (data inventory ready in privacy policy)
-- ⬜ Age rating questionnaire
+- ✅ **App Privacy "nutrition label"** — paste-ready ASC answers in `docs/APP_PRIVACY_NUTRITION_LABEL.md` (all data Linked / App Functionality / **not** tracking; no location, no ad SDKs). ⬜ still needs entering into ASC
+- ✅ **Age rating questionnaire** — answers in `docs/APP_AGE_RATING.md`, lands at **12+**. ⬜ still needs entering into ASC
 
 ## 3. Guideline compliance
 - ✅ **Sign in with Apple** (required alongside Google sign-in) — built
