@@ -17,12 +17,12 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ⬜ Complete **banking + tax** info on the Armenia entity (W-8/tax forms)
 
 ## 2. App Store Connect listing
-- ⬜ App name, subtitle, primary/secondary category (Lifestyle or Social Networking)
-- ⬜ Description, keywords, promotional text
-- ⬜ **Screenshots** for required device sizes (6.7" + 6.5" iPhone minimum)
-- ⬜ App icon 1024×1024
-- ✅ **Privacy Policy URL** — https://warmth-api.dbtvault-solutions.tech/privacy (live, v29) · ⬜ Support URL + optional marketing URL
-- ⬜ **App Privacy "nutrition label"** — declare collection of email, name, push token + usage
+- ✅ **Listing copy drafted** — name, subtitle, description, keywords, categories in `docs/APP_STORE_LISTING.md` (still needs entering into ASC)
+- ⬜ **Screenshots** for required device sizes (6.7" iPhone minimum) — needs the running app on a device
+- ✅ **App icon 1024×1024** — variant A (interlocking swirl), `app/assets/icon.png`, shipped in build 20
+- ✅ **Privacy Policy URL** — https://warmth-api.dbtvault-solutions.tech/privacy (live)
+- ✅ **Support URL** — https://warmth-api.dbtvault-solutions.tech/support (live, v32) · ⬜ optional marketing URL
+- ⬜ **App Privacy "nutrition label"** — declare collection of email, name, push token + usage (data inventory ready in privacy policy)
 - ⬜ Age rating questionnaire
 
 ## 3. Guideline compliance
