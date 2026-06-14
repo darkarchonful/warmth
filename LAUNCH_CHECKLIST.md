@@ -18,7 +18,7 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 
 ## 2. App Store Connect listing
 - ✅ **Listing copy drafted** — name, subtitle, description, keywords, categories in `docs/APP_STORE_LISTING.md` (still needs entering into ASC)
-- ⬜ **Screenshots** for required device sizes (6.7" iPhone minimum) — needs the running app on a device
+- ⏳ **Screenshots** for required device sizes (6.7" iPhone minimum) — capture plan in `docs/APP_STORE_SCREENSHOTS.md` (6 shots, captions, setup via demo account). ⬜ still needs capturing on a device (blocked on real card art for hero shots)
 - ✅ **App icon 1024×1024** — variant A (interlocking swirl), `app/assets/icon.png`, shipped in build 20
 - ✅ **Privacy Policy URL** — https://warmth-api.dbtvault-solutions.tech/privacy (live)
 - ✅ **Support URL** — https://warmth-api.dbtvault-solutions.tech/support (live, v32) · ⬜ optional marketing URL
