@@ -50,18 +50,30 @@ spec:
           - 8.8.8.8
       containers:
         - name: api
-          image: ghcr.io/darkarchonful/warmth-api:v26
+          image: ghcr.io/darkarchonful/warmth-api:v32
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
             - name: APP_VERSION
-              value: "v26"
+              value: "v32"
             - name: APPLE_BUNDLE_ID
               value: "com.dbtvault.warmth"
             # TODO: remove before public launch — testing bypass for daily cap
             - name: DISABLE_SWIPE_LIMIT
               value: "1"
+            # Re-pair cooldown in hours; 0 = disabled for testing/App Review.
+            # TODO: set to 48 post-launch to restore anti-churn protection.
+            - name: REPAIR_COOLDOWN_HOURS
+              value: "0"
+            # App Store review demo logins: these emails skip email send and
+            # accept DEMO_CODE as a fixed login code (comma-separated allowlist —
+            # reviewer account + partner, so matching can be tested across two
+            # devices). TODO: remove post-launch.
+            - name: DEMO_EMAIL
+              value: "appreview@warmth.dbtvault-solutions.tech,appreview.partner@warmth.dbtvault-solutions.tech"
+            - name: DEMO_CODE
+              value: "473829"
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:

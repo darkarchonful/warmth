@@ -12,6 +12,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use('/images/activities', express.static(path.join(__dirname, '..', 'public', 'activities')));
+// Public privacy policy + support pages (App Store requires reachable URLs).
+app.get(['/privacy', '/privacy.html'], (req, res) =>
+  res.sendFile(path.join(__dirname, '..', 'public', 'privacy.html')));
+app.get(['/support', '/support.html'], (req, res) =>
+  res.sendFile(path.join(__dirname, '..', 'public', 'support.html')));
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -85,6 +90,10 @@ function generateLoginCode() {
   return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 }
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// App Store review demo logins — comma-separated allowlist of emails that skip
+// email-code delivery and accept the fixed DEMO_CODE. Empty in normal prod.
+const DEMO_EMAILS = (process.env.DEMO_EMAIL || '')
+  .toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
 
 // Find-or-create a user from a verified email (the email-login path). The
 // emailed code proves inbox ownership, so an existing row with this email is
@@ -348,6 +357,13 @@ app.post('/auth/email/request', async (req, res) => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email' });
 
+  // App Store review demo accounts: no email is sent; the login code is fixed
+  // (DEMO_CODE, checked in /verify). Lets a reviewer sign in with no inbox
+  // access. DEMO_EMAIL is a comma-separated allowlist (e.g. the reviewer
+  // account + its partner, so matching can be tested across two devices).
+  // No-op in production unless DEMO_EMAIL is configured.
+  if (DEMO_EMAILS.includes(email)) return res.json({ ok: true });
+
   if (!process.env.RESEND_API_KEY) return res.status(503).json({ error: 'Email login is unavailable' });
 
   // Throttle resends.
@@ -394,6 +410,14 @@ app.post('/auth/email/verify', async (req, res) => {
   const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
   if (!EMAIL_RE.test(email) || !/^\d{6}$/.test(code)) {
     return res.status(400).json({ error: 'Invalid email or code' });
+  }
+
+  // App Store review demo accounts: accept the fixed DEMO_CODE for any email in
+  // the DEMO_EMAILS allowlist. No-op in production unless both are configured.
+  if (DEMO_EMAILS.includes(email) && process.env.DEMO_CODE && code === process.env.DEMO_CODE) {
+    const user = await upsertEmailUser(email);
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+    return res.json({ token, user });
   }
 
   const row = await pool.query('SELECT code_hash, expires_at, attempts FROM email_login_codes WHERE email = $1', [email]);
@@ -693,26 +717,31 @@ app.post('/couple/join', auth, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Cannot pair with yourself' });
     }
-    // Cooldown after a break-up: same two people can't re-pair for 48h.
-    // Pairing with someone new is unaffected.
-    const prior = await client.query(
-      `SELECT ended_at FROM couples
-       WHERE user_b_id IS NOT NULL
-         AND ((user_a_id = $1 AND user_b_id = $2) OR (user_a_id = $2 AND user_b_id = $1))
-         AND ended_at IS NOT NULL
-       ORDER BY ended_at DESC LIMIT 1`,
-      [couple.rows[0].user_a_id, req.user.id]
-    );
-    if (prior.rows.length > 0) {
-      const endedAt = new Date(prior.rows[0].ended_at);
-      const hoursSince = (Date.now() - endedAt.getTime()) / 3600000;
-      if (hoursSince < 48) {
-        await client.query('ROLLBACK');
-        const hoursLeft = Math.ceil(48 - hoursSince);
-        const when = hoursLeft >= 24
-          ? `in about ${Math.ceil(hoursLeft / 24)} day${hoursLeft >= 48 ? 's' : ''}`
-          : `in ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}`;
-        return res.status(400).json({ error: `Give it a moment — you two can reconnect ${when}` });
+    // Cooldown after a break-up: same two people can't re-pair for N hours.
+    // Pairing with someone new is unaffected. Gated by REPAIR_COOLDOWN_HOURS —
+    // set to 0 (current default) to disable while testing / under App Review,
+    // where pair→unpair→re-pair must work freely. Restore (e.g. 48) post-launch.
+    const cooldownHours = Number(process.env.REPAIR_COOLDOWN_HOURS) || 0;
+    if (cooldownHours > 0) {
+      const prior = await client.query(
+        `SELECT ended_at FROM couples
+         WHERE user_b_id IS NOT NULL
+           AND ((user_a_id = $1 AND user_b_id = $2) OR (user_a_id = $2 AND user_b_id = $1))
+           AND ended_at IS NOT NULL
+         ORDER BY ended_at DESC LIMIT 1`,
+        [couple.rows[0].user_a_id, req.user.id]
+      );
+      if (prior.rows.length > 0) {
+        const endedAt = new Date(prior.rows[0].ended_at);
+        const hoursSince = (Date.now() - endedAt.getTime()) / 3600000;
+        if (hoursSince < cooldownHours) {
+          await client.query('ROLLBACK');
+          const hoursLeft = Math.ceil(cooldownHours - hoursSince);
+          const when = hoursLeft >= 24
+            ? `in about ${Math.ceil(hoursLeft / 24)} day${hoursLeft >= 48 ? 's' : ''}`
+            : `in ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'}`;
+          return res.status(400).json({ error: `Give it a moment — you two can reconnect ${when}` });
+        }
       }
     }
     await client.query(

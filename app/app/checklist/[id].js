@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, API_URL } from '../../lib/api';
@@ -15,6 +15,7 @@ export default function PlanDetail() {
   const { id } = useLocalSearchParams();
   const [item, setItem] = useState(null);
   const [meId, setMeId] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -22,16 +23,37 @@ export default function PlanDetail() {
         const me = await api.me();
         setMeId(me.user.id);
         const list = await api.getChecklist();
-        setItem(list.find(x => x.id.toString() === id));
+        setItem(list.find(x => x.id.toString() === id) || null);
       } catch {}
+      finally { setLoading(false); }
     })();
   }, [id]);
 
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  // Not in the active checklist: completed, removed, or a stale deep link (e.g.
+  // a notification for a plan from an old pairing). Don't dead-end on a blank
+  // screen — say so and offer a way back.
   if (!item) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}><Text style={styles.back}>Back</Text></TouchableOpacity>
+          <TouchableOpacity style={{ flex: 1 }} onPress={() => router.back()}><Text style={styles.back}>Back</Text></TouchableOpacity>
+          <Text style={styles.headerTitle}>Plan</Text>
+          <View style={{ flex: 1 }} />
+        </View>
+        <View style={styles.centered}>
+          <Text style={styles.goneTitle}>This plan isn't here anymore</Text>
+          <Text style={styles.goneBody}>It may have been completed or removed.</Text>
+          <TouchableOpacity style={styles.goneBtn} onPress={() => router.replace('/swipe')}>
+            <Text style={styles.goneBtnText}>Back to your deck</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -89,4 +111,9 @@ const styles = StyleSheet.create({
   tagline: { fontSize: 14, color: colors.textLight, marginBottom: 10 },
   stateLine: { fontSize: 13, color: colors.textLight },
   divider: { height: 1, backgroundColor: colors.line || '#eee' },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  goneTitle: { fontSize: 18, color: colors.text, fontWeight: '500', textAlign: 'center', marginBottom: 8 },
+  goneBody: { fontSize: 14, color: colors.textLight, textAlign: 'center', marginBottom: 24 },
+  goneBtn: { backgroundColor: colors.accent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 },
+  goneBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });
