@@ -43,7 +43,7 @@ VALUES
 INSERT INTO comments (parent_type, parent_id, user_id, text, created_at)
 SELECT 'plan', cl.id,
        (SELECT id FROM users WHERE email='appreview.partner@warmth.dbtvault-solutions.tech'),
-       'Cant wait — Ill grab the ingredients on the way home', NOW()-INTERVAL '20 hours'
+       'Can''t wait — I''ll grab the ingredients on the way home', NOW()-INTERVAL '20 hours'
 FROM checklist cl
 WHERE cl.couple_id=(SELECT id FROM couples WHERE invite_code='DEMO001') AND cl.activity_id=32;
 
@@ -53,7 +53,7 @@ INSERT INTO memories (couple_id, activity_id, activity_title, activity_tagline, 
 SELECT (SELECT id FROM couples WHERE invite_code='DEMO001'),
        a.id, a.title, a.tagline, a.image_url, c.name,
        NOW()-INTERVAL '3 days', NOW()-INTERVAL '3 days',
-       5, 5, 'Best slow morning weve had in ages', 'Lets make this a weekend thing.'
+       5, 5, 'Best slow morning we''ve had in ages', 'Let''s make this a weekend thing.'
 FROM activities a JOIN categories c ON c.id=a.category_id
 WHERE a.id=27;
 
