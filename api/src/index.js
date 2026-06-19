@@ -756,7 +756,26 @@ app.get('/activities/next', auth, async (req, res) => {
     [coupleId]
   );
   if (parseInt(pending.rows[0].count) >= 3) {
-    return res.json({ blocked: true, message: 'Complete an activity before swiping more' });
+    // Surface the art of the plans that are actually blocking the deck, so the
+    // "Time to act" screen can show them scattered instead of a bare emoji.
+    // Top-level plans only (skip journey sub-steps), most recently touched first,
+    // and only those with real art. New `plan_images` field — older clients that
+    // don't read it just keep the emoji, so it's backward compatible.
+    const planned = await pool.query(
+      `SELECT a.image_url
+         FROM checklist cl JOIN activities a ON a.id = cl.activity_id
+        WHERE cl.couple_id = $1 AND cl.status != 'done'
+          AND cl.parent_checklist_id IS NULL
+          AND a.image_url IS NOT NULL
+        ORDER BY cl.updated_at DESC LIMIT 5`,
+      [coupleId]
+    );
+    return res.json({
+      blocked: true,
+      reason: 'gate',
+      message: 'Complete an activity before swiping more',
+      plan_images: planned.rows.map(r => r.image_url),
+    });
   }
 
   // Daily ration with spread days and completion bonus.
