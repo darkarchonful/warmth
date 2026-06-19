@@ -408,10 +408,46 @@ export default function Swipe() {
     );
   }
 
+  // Top navigation bar — shared between the live deck and the terminal states
+  // (blocked / "Time to act") so the user is never trapped with only one exit.
+  const navBar = (
+    <View style={styles.nav}>
+      <TouchableOpacity style={styles.navSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.push('/checklist')}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={[styles.navItem, { textAlign: 'left' }]}>Plans</Text>
+          {unread > 0 && <PulsingDot />}
+        </View>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.navCenter}
+        activeOpacity={0.7}
+        onPressIn={() => {
+          Animated.timing(titleScale, { toValue: 0.96, duration: 120, useNativeDriver: true }).start();
+        }}
+        onPressOut={() => {
+          Animated.spring(titleScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
+        }}
+        onPress={() => router.push('/settings')}
+      >
+        <Animated.View style={[styles.navPill, { transform: [{ scale: titleScale }] }]}>
+          <Text style={styles.navTitle}>Warmth{backendVersion ? ` · ${backendVersion}` : ''}</Text>
+          <Text style={styles.navTitleCaret}>⌄</Text>
+        </Animated.View>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.navSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.push('/memories')}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <Text style={[styles.navItem, { textAlign: 'right' }]}>Memories</Text>
+          {unreadMem > 0 && <PulsingDot />}
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
+
   if (blocked) {
     const isComeBack = previewImages.length > 0;
     return (
-      <View style={styles.matchContainer}>
+      <View style={[styles.matchContainer, { paddingTop: 80 }]}>
+        {navBar}
         <View style={styles.matchCenter}>
           {isComeBack && (
             <View style={styles.previewRow}>
@@ -498,36 +534,7 @@ export default function Swipe() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.nav}>
-        <TouchableOpacity style={styles.navSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.push('/checklist')}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={[styles.navItem, { textAlign: 'left' }]}>Plans</Text>
-            {unread > 0 && <PulsingDot />}
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navCenter}
-          activeOpacity={0.7}
-          onPressIn={() => {
-            Animated.timing(titleScale, { toValue: 0.96, duration: 120, useNativeDriver: true }).start();
-          }}
-          onPressOut={() => {
-            Animated.spring(titleScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
-          }}
-          onPress={() => router.push('/settings')}
-        >
-          <Animated.View style={[styles.navPill, { transform: [{ scale: titleScale }] }]}>
-            <Text style={styles.navTitle}>Warmth{backendVersion ? ` · ${backendVersion}` : ''}</Text>
-            <Text style={styles.navTitleCaret}>⌄</Text>
-          </Animated.View>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.push('/memories')}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
-            <Text style={[styles.navItem, { textAlign: 'right' }]}>Memories</Text>
-            {unreadMem > 0 && <PulsingDot />}
-          </View>
-        </TouchableOpacity>
-      </View>
+      {navBar}
 
       <Animated.View
         {...panResponder.panHandlers}
