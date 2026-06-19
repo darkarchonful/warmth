@@ -55,6 +55,7 @@ export default function Swipe() {
   const [blocked, setBlocked] = useState(false);
   const [blockMessage, setBlockMessage] = useState('');
   const [previewImages, setPreviewImages] = useState([]);
+  const [planImages, setPlanImages] = useState([]);
   const [matchPopup, setMatchPopup] = useState(null);
   const [coachMatch, setCoachMatch] = useState(false);
   const introHandledRef = useRef(false);
@@ -172,6 +173,7 @@ export default function Swipe() {
         setBlocked(true);
         setBlockMessage(data.message);
         setPreviewImages(data.preview_images || []);
+        setPlanImages(data.plan_images || []);
         return;
       }
       if (data.done) {
@@ -432,14 +434,20 @@ export default function Swipe() {
       <View style={[styles.matchContainer, { paddingTop: 80 }]}>
         {navBar}
         <View style={styles.matchCenter}>
-          {isComeBack && (
-            <View style={styles.previewRow}>
-              {previewImages.map((url, i) => (
-                <AnimatedPreviewCard key={i} url={resolveImage(url)} index={i} />
-              ))}
-            </View>
+          {isComeBack ? (
+            <>
+              <View style={styles.previewRow}>
+                {previewImages.map((url, i) => (
+                  <AnimatedPreviewCard key={i} url={resolveImage(url)} index={i} />
+                ))}
+              </View>
+              <Text style={styles.matchEmoji}>🌙</Text>
+            </>
+          ) : planImages.length > 0 ? (
+            <PlanScatter images={planImages.map(resolveImage)} />
+          ) : (
+            <Text style={styles.matchEmoji}>✨</Text>
           )}
-          <Text style={styles.matchEmoji}>{isComeBack ? '🌙' : '✨'}</Text>
           <Text style={styles.matchTitle}>{isComeBack ? 'That\'s enough for today' : 'Time to act'}</Text>
           <Text style={styles.matchFooter}>{blockMessage}</Text>
           <TouchableOpacity
@@ -709,6 +717,46 @@ export default function Swipe() {
         </View>
         </KeyboardAvoidingView>
       </Modal>
+    </View>
+  );
+}
+
+// "Time to act" hero: the couple's open plans dealt out like a little pile of
+// photos — each card tilted at its own angle, overlapping, springing in with a
+// staggered delay. Replaces the bare ✨ when we have plan art to show.
+const SCATTER_TILTS = ['-11deg', '7deg', '-4deg', '10deg', '-2deg'];
+
+function ScatterCard({ url, index, tilt }) {
+  const enter = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(enter, {
+      toValue: 1, friction: 6, tension: 55, delay: index * 110, useNativeDriver: true,
+    }).start();
+  }, []);
+  return (
+    <Animated.Image
+      source={{ uri: url }}
+      style={[styles.scatterCard, {
+        opacity: enter,
+        zIndex: index,
+        transform: [
+          { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
+          { rotate: tilt },
+        ],
+      }]}
+      resizeMode="cover"
+    />
+  );
+}
+
+function PlanScatter({ images }) {
+  const items = images.filter(Boolean).slice(0, SCATTER_TILTS.length);
+  if (items.length === 0) return <Text style={styles.matchEmoji}>✨</Text>;
+  return (
+    <View style={styles.scatterWrap}>
+      {items.map((url, i) => (
+        <ScatterCard key={i} url={url} index={i} tilt={SCATTER_TILTS[i]} />
+      ))}
     </View>
   );
 }
@@ -1072,6 +1120,27 @@ const styles = StyleSheet.create({
   previewRow: {
     flexDirection: 'row',
     marginBottom: 30,
+  },
+  scatterWrap: {
+    flexDirection: 'row',
+    height: 150,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 30,
+  },
+  scatterCard: {
+    width: 86,
+    height: 110,
+    borderRadius: 12,
+    borderWidth: 3,
+    borderColor: '#fff',
+    marginHorizontal: -15,
+    backgroundColor: colors.warm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 4,
   },
   previewImg: {
     width: 70,
