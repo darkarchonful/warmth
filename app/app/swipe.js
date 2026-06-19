@@ -56,6 +56,9 @@ export default function Swipe() {
   const [blockMessage, setBlockMessage] = useState('');
   const [previewImages, setPreviewImages] = useState([]);
   const [planImages, setPlanImages] = useState([]);
+  // Bumped on every screen focus so the Time-to-act scatter remounts and
+  // re-plays its entrance each time the user lands here (not just on app open).
+  const [focusNonce, setFocusNonce] = useState(0);
   const [matchPopup, setMatchPopup] = useState(null);
   const [coachMatch, setCoachMatch] = useState(false);
   const introHandledRef = useRef(false);
@@ -118,6 +121,7 @@ export default function Swipe() {
 
   useFocusEffect(useCallback(() => {
     bootedRef.current = false;
+    setFocusNonce((n) => n + 1);
     const tick = () => api.me().then(d => {
       setUnread(d.unreadCount || 0);
       setUnreadMem(d.unreadMemories || 0);
@@ -444,7 +448,7 @@ export default function Swipe() {
               <Text style={styles.matchEmoji}>🌙</Text>
             </>
           ) : planImages.length > 0 ? (
-            <PlanScatter images={planImages.map(resolveImage)} />
+            <PlanScatter key={focusNonce} images={planImages.map(resolveImage)} />
           ) : (
             <Text style={styles.matchEmoji}>✨</Text>
           )}
@@ -1130,18 +1134,18 @@ const styles = StyleSheet.create({
   },
   scatterWrap: {
     flexDirection: 'row',
-    height: 190,
+    height: 210,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 28,
   },
   scatterCard: {
-    width: 108,
-    height: 138,
-    borderRadius: 14,
+    width: 124,
+    height: 158,
+    borderRadius: 16,
     borderWidth: 3,
     borderColor: '#fff',
-    marginHorizontal: -18,
+    marginHorizontal: -22,
     backgroundColor: colors.warm,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
