@@ -721,12 +721,18 @@ export default function Swipe() {
   );
 }
 
-// "Time to act" hero: the couple's open plans dealt out like a little pile of
-// photos — each card tilted at its own angle, overlapping, springing in with a
-// staggered delay. Replaces the bare ✨ when we have plan art to show.
-const SCATTER_TILTS = ['-11deg', '7deg', '-4deg', '10deg', '-2deg'];
+// "Time to act" hero: the couple's open plans dealt out like a handful of
+// tossed photos — each card tilted at its own angle AND nudged up or down a
+// little so the pile looks scattered rather than lined up. Overlapping, with a
+// staggered spring-in. Replaces the bare ✨ when we have plan art to show.
+const SCATTER_LAYOUT = [
+  { tilt: '-10deg', dy: 10 },
+  { tilt: '8deg', dy: -12 },
+  { tilt: '-5deg', dy: 4 },
+  { tilt: '9deg', dy: -6 },
+];
 
-function ScatterCard({ url, index, tilt }) {
+function ScatterCard({ url, index, tilt, dy }) {
   const enter = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.spring(enter, {
@@ -740,6 +746,7 @@ function ScatterCard({ url, index, tilt }) {
         opacity: enter,
         zIndex: index,
         transform: [
+          { translateY: dy },
           { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
           { rotate: tilt },
         ],
@@ -750,12 +757,12 @@ function ScatterCard({ url, index, tilt }) {
 }
 
 function PlanScatter({ images }) {
-  const items = images.filter(Boolean).slice(0, SCATTER_TILTS.length);
+  const items = images.filter(Boolean).slice(0, SCATTER_LAYOUT.length);
   if (items.length === 0) return <Text style={styles.matchEmoji}>✨</Text>;
   return (
     <View style={styles.scatterWrap}>
       {items.map((url, i) => (
-        <ScatterCard key={i} url={url} index={i} tilt={SCATTER_TILTS[i]} />
+        <ScatterCard key={i} url={url} index={i} tilt={SCATTER_LAYOUT[i].tilt} dy={SCATTER_LAYOUT[i].dy} />
       ))}
     </View>
   );
@@ -1123,24 +1130,24 @@ const styles = StyleSheet.create({
   },
   scatterWrap: {
     flexDirection: 'row',
-    height: 150,
+    height: 190,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 30,
+    marginBottom: 28,
   },
   scatterCard: {
-    width: 86,
-    height: 110,
-    borderRadius: 12,
+    width: 108,
+    height: 138,
+    borderRadius: 14,
     borderWidth: 3,
     borderColor: '#fff',
-    marginHorizontal: -15,
+    marginHorizontal: -18,
     backgroundColor: colors.warm,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOpacity: 0.2,
+    shadowRadius: 7,
+    elevation: 5,
   },
   previewImg: {
     width: 70,
