@@ -57,6 +57,10 @@ export default function Swipe() {
   const [blockMessage, setBlockMessage] = useState('');
   const [premiumRequired, setPremiumRequired] = useState(false);
   const [previewImages, setPreviewImages] = useState([]);
+  const [planImages, setPlanImages] = useState([]);
+  // Bumped on every screen focus so the Time-to-act scatter remounts and
+  // re-plays its entrance each time the user lands here (not just on app open).
+  const [focusNonce, setFocusNonce] = useState(0);
   const [matchPopup, setMatchPopup] = useState(null);
   const [coachMatch, setCoachMatch] = useState(false);
   const introHandledRef = useRef(false);
@@ -119,6 +123,7 @@ export default function Swipe() {
 
   useFocusEffect(useCallback(() => {
     bootedRef.current = false;
+    setFocusNonce((n) => n + 1);
     const tick = () => api.me().then(d => {
       setUnread(d.unreadCount || 0);
       setUnreadMem(d.unreadMemories || 0);
@@ -178,6 +183,7 @@ export default function Swipe() {
         setBlocked(true);
         setBlockMessage(data.message);
         setPreviewImages(data.preview_images || []);
+        setPlanImages(data.plan_images || []);
         return;
       }
       if (data.done) {
@@ -262,6 +268,7 @@ export default function Swipe() {
       try {
         const result = await api.nudgeSwipe(current.memory_id, liked);
         if (result.match) {
+          queueRef.current = [];   // new plan — re-check the deck gate on the next card
           if (result.first_match) { setCoachMatch(true); loadNext(); }
           else {
             setMatchPopup(current.title);
@@ -278,6 +285,11 @@ export default function Swipe() {
     try {
       const result = await api.swipe(current.id, liked);
       if (result.match) {
+        // A new plan was just created. Drop the locally cached deck so the next
+        // card forces a fresh /activities/next — that's where the 3-plan gate is
+        // evaluated, so "Time to act" appears right after the match instead of a
+        // few cached cards later.
+        queueRef.current = [];
         if (result.first_match) { setCoachMatch(true); loadNext(); }
         else {
           setMatchPopup(current.title);
@@ -449,14 +461,20 @@ export default function Swipe() {
       <View style={[styles.matchContainer, { paddingTop: 80 }]}>
         {navBar}
         <View style={styles.matchCenter}>
-          {isComeBack && (
-            <View style={styles.previewRow}>
-              {previewImages.map((url, i) => (
-                <AnimatedPreviewCard key={i} url={resolveImage(url)} index={i} />
-              ))}
-            </View>
+          {isComeBack ? (
+            <>
+              <View style={styles.previewRow}>
+                {previewImages.map((url, i) => (
+                  <AnimatedPreviewCard key={i} url={resolveImage(url)} index={i} />
+                ))}
+              </View>
+              <Text style={styles.matchEmoji}>🌙</Text>
+            </>
+          ) : planImages.length > 0 ? (
+            <PlanScatter key={focusNonce} images={planImages.map(resolveImage)} />
+          ) : (
+            <Text style={styles.matchEmoji}>✨</Text>
           )}
-          <Text style={styles.matchEmoji}>{isComeBack ? '🌙' : '✨'}</Text>
           <Text style={styles.matchTitle}>{isComeBack ? 'That\'s enough for today' : 'Time to act'}</Text>
           <Text style={styles.matchFooter}>{blockMessage}</Text>
           <TouchableOpacity
@@ -726,6 +744,69 @@ export default function Swipe() {
         </View>
         </KeyboardAvoidingView>
       </Modal>
+    </View>
+  );
+}
+
+// "Time to act" hero: the couple's open plans dealt out like a handful of
+// tossed photos — each card tilted at its own angle AND nudged up or down a
+// little so the pile looks scattered rather than lined up. Overlapping, with a
+// staggered spring-in. Replaces the bare ✨ when we have plan art to show.
+const SCATTER_LAYOUT = [
+  { tilt: '-10deg', dy: 12 },
+  { tilt: '8deg', dy: -14 },
+  { tilt: '-5deg', dy: 6 },
+  { tilt: '9deg', dy: -8 },
+];
+
+function ScatterCard({ url, index, tilt, dy, w, h, overlap }) {
+  const enter = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(enter, {
+      toValue: 1, friction: 6, tension: 55, delay: index * 110, useNativeDriver: true,
+    }).start();
+  }, []);
+  return (
+    <Animated.Image
+      source={{ uri: url }}
+      style={[styles.scatterCard, {
+        width: w,
+        height: h,
+        marginHorizontal: -overlap / 2,
+        opacity: enter,
+        zIndex: index,
+        transform: [
+          { translateY: dy },
+          { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
+          { rotate: tilt },
+        ],
+      }]}
+      resizeMode="cover"
+    />
+  );
+}
+
+// Size the cards to the actual count so they fill the free width in proportion:
+// the gate fires at 3 open plans, so there are usually only 2–3 cards and they
+// get large; a rare 4th just shrinks them to stay on-screen. Cards overlap ~30%
+// and the width is derived from SCREEN_W, so it scales across phone sizes.
+function PlanScatter({ images }) {
+  const items = images.filter(Boolean).slice(0, SCATTER_LAYOUT.length);
+  const n = items.length;
+  if (n === 0) return <Text style={styles.matchEmoji}>✨</Text>;
+  const usable = SCREEN_W - 56;                  // screen minus container padding + breathing room
+  const overlapRatio = 0.3;
+  const span = n - (n - 1) * overlapRatio;       // total footprint in card-widths
+  const cardW = Math.min(180, usable / span);    // cap so 1–2 cards don't get oversized
+  const cardH = Math.round(cardW * 1.28);
+  const overlap = cardW * overlapRatio;
+  return (
+    <View style={[styles.scatterWrap, { height: cardH + 44 }]}>
+      {items.map((url, i) => (
+        <ScatterCard key={i} url={url} index={i}
+          tilt={SCATTER_LAYOUT[i].tilt} dy={SCATTER_LAYOUT[i].dy}
+          w={cardW} h={cardH} overlap={overlap} />
+      ))}
     </View>
   );
 }
@@ -1089,6 +1170,23 @@ const styles = StyleSheet.create({
   previewRow: {
     flexDirection: 'row',
     marginBottom: 30,
+  },
+  scatterWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 28,
+  },
+  scatterCard: {
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: '#fff',
+    backgroundColor: colors.warm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 7,
+    elevation: 5,
   },
   previewImg: {
     width: 70,
