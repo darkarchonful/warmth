@@ -262,6 +262,7 @@ export default function Swipe() {
       try {
         const result = await api.nudgeSwipe(current.memory_id, liked);
         if (result.match) {
+          queueRef.current = [];   // new plan — re-check the deck gate on the next card
           if (result.first_match) { setCoachMatch(true); loadNext(); }
           else {
             setMatchPopup(current.title);
@@ -278,6 +279,11 @@ export default function Swipe() {
     try {
       const result = await api.swipe(current.id, liked);
       if (result.match) {
+        // A new plan was just created. Drop the locally cached deck so the next
+        // card forces a fresh /activities/next — that's where the 3-plan gate is
+        // evaluated, so "Time to act" appears right after the match instead of a
+        // few cached cards later.
+        queueRef.current = [];
         if (result.first_match) { setCoachMatch(true); loadNext(); }
         else {
           setMatchPopup(current.title);
