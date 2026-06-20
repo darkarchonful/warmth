@@ -730,13 +730,13 @@ export default function Swipe() {
 // little so the pile looks scattered rather than lined up. Overlapping, with a
 // staggered spring-in. Replaces the bare ✨ when we have plan art to show.
 const SCATTER_LAYOUT = [
-  { tilt: '-10deg', dy: 10 },
-  { tilt: '8deg', dy: -12 },
-  { tilt: '-5deg', dy: 4 },
-  { tilt: '9deg', dy: -6 },
+  { tilt: '-10deg', dy: 12 },
+  { tilt: '8deg', dy: -14 },
+  { tilt: '-5deg', dy: 6 },
+  { tilt: '9deg', dy: -8 },
 ];
 
-function ScatterCard({ url, index, tilt, dy }) {
+function ScatterCard({ url, index, tilt, dy, w, h, overlap }) {
   const enter = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.spring(enter, {
@@ -747,6 +747,9 @@ function ScatterCard({ url, index, tilt, dy }) {
     <Animated.Image
       source={{ uri: url }}
       style={[styles.scatterCard, {
+        width: w,
+        height: h,
+        marginHorizontal: -overlap / 2,
         opacity: enter,
         zIndex: index,
         transform: [
@@ -760,13 +763,26 @@ function ScatterCard({ url, index, tilt, dy }) {
   );
 }
 
+// Size the cards to the actual count so they fill the free width in proportion:
+// the gate fires at 3 open plans, so there are usually only 2–3 cards and they
+// get large; a rare 4th just shrinks them to stay on-screen. Cards overlap ~30%
+// and the width is derived from SCREEN_W, so it scales across phone sizes.
 function PlanScatter({ images }) {
   const items = images.filter(Boolean).slice(0, SCATTER_LAYOUT.length);
-  if (items.length === 0) return <Text style={styles.matchEmoji}>✨</Text>;
+  const n = items.length;
+  if (n === 0) return <Text style={styles.matchEmoji}>✨</Text>;
+  const usable = SCREEN_W - 56;                  // screen minus container padding + breathing room
+  const overlapRatio = 0.3;
+  const span = n - (n - 1) * overlapRatio;       // total footprint in card-widths
+  const cardW = Math.min(180, usable / span);    // cap so 1–2 cards don't get oversized
+  const cardH = Math.round(cardW * 1.28);
+  const overlap = cardW * overlapRatio;
   return (
-    <View style={styles.scatterWrap}>
+    <View style={[styles.scatterWrap, { height: cardH + 44 }]}>
       {items.map((url, i) => (
-        <ScatterCard key={i} url={url} index={i} tilt={SCATTER_LAYOUT[i].tilt} dy={SCATTER_LAYOUT[i].dy} />
+        <ScatterCard key={i} url={url} index={i}
+          tilt={SCATTER_LAYOUT[i].tilt} dy={SCATTER_LAYOUT[i].dy}
+          w={cardW} h={cardH} overlap={overlap} />
       ))}
     </View>
   );
@@ -1134,18 +1150,14 @@ const styles = StyleSheet.create({
   },
   scatterWrap: {
     flexDirection: 'row',
-    height: 210,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 28,
   },
   scatterCard: {
-    width: 124,
-    height: 158,
     borderRadius: 16,
     borderWidth: 3,
     borderColor: '#fff',
-    marginHorizontal: -22,
     backgroundColor: colors.warm,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
