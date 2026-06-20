@@ -1,4 +1,13 @@
 import * as SecureStore from 'expo-secure-store';
+import * as Notifications from 'expo-notifications';
+
+// Keep the app-icon badge in sync with the in-app unread total. Called after
+// every /me so reading plans/memories (which zeroes the server counts) clears
+// the icon badge, and cleared outright on logout. Best-effort — never throws
+// into a request flow.
+export function syncBadge(count) {
+  Notifications.setBadgeCountAsync(Math.max(0, count | 0)).catch(() => {});
+}
 
 export const API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
@@ -37,6 +46,7 @@ export async function saveToken(t) {
 export async function clearToken() {
   token = null;
   await SecureStore.deleteItemAsync('token');
+  syncBadge(0);
 }
 
 async function request(path, options = {}) {
@@ -100,7 +110,11 @@ export const api = {
   }),
 
   // User
-  me: () => request('/me'),
+  me: async () => {
+    const d = await request('/me');
+    syncBadge((d.unreadCount || 0) + (d.unreadMemories || 0));
+    return d;
+  },
   updateName: (name) => request('/me', {
     method: 'PATCH',
     body: JSON.stringify({ name }),
