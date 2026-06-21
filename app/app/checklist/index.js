@@ -314,8 +314,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   thumb: {
-    width: 56,
-    height: 72,
+    width: 96,
+    height: 110,
     borderRadius: 12,
     backgroundColor: colors.bg,
   },
