@@ -309,6 +309,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 14,
+    marginBottom: 14,
   },
   topText: {
     flex: 1,
