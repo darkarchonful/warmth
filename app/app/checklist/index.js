@@ -1,9 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
-import { api } from '../../lib/api';
+import { api, API_URL } from '../../lib/api';
 import CoachCard from '../../components/CoachCard';
+
+function resolveImage(url) {
+  if (!url) return null;
+  return url.startsWith('http') ? url : `${API_URL}${url}`;
+}
 
 export default function Checklist() {
   const router = useRouter();
@@ -126,16 +131,25 @@ export default function Checklist() {
         onPress={() => router.push(`/checklist/${item.id}`)}
         style={[styles.item, item.is_new && styles.itemNew]}
       >
-        <View style={styles.itemHeader}>
-          <Text style={styles.itemCategory}>
-            {item.is_journey ? 'JOURNEY · ' : ''}{item.category_name}
-          </Text>
-          <Text style={[styles.status, styles[`status_${item.status}`]]}>
-            {item.status === 'matched' ? 'Confirm' : 'Planned'}
-          </Text>
+        <View style={styles.topRow}>
+          {item.image_url ? (
+            <Image source={{ uri: resolveImage(item.image_url) }} style={styles.thumb} />
+          ) : (
+            <View style={[styles.thumb, styles.thumbPlaceholder]} />
+          )}
+          <View style={styles.topText}>
+            <View style={styles.itemHeader}>
+              <Text style={styles.itemCategory} numberOfLines={1}>
+                {item.is_journey ? 'JOURNEY · ' : ''}{item.category_name}
+              </Text>
+              <Text style={[styles.status, styles[`status_${item.status}`]]}>
+                {item.status === 'matched' ? 'Confirm' : 'Planned'}
+              </Text>
+            </View>
+            <Text style={styles.itemTitle}>{item.title}</Text>
+            <Text style={styles.itemTagline}>{item.tagline}</Text>
+          </View>
         </View>
-        <Text style={styles.itemTitle}>{item.title}</Text>
-        <Text style={styles.itemTagline}>{item.tagline}</Text>
 
         {item.status === 'matched' && (
           <>
@@ -290,6 +304,24 @@ const styles = StyleSheet.create({
   },
   itemNew: {
     borderColor: colors.accent,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+  },
+  topText: {
+    flex: 1,
+  },
+  thumb: {
+    width: 56,
+    height: 72,
+    borderRadius: 12,
+    backgroundColor: colors.bg,
+  },
+  thumbPlaceholder: {
+    borderWidth: 1,
+    borderColor: colors.line || '#eee',
   },
   itemHeader: {
     flexDirection: 'row',
