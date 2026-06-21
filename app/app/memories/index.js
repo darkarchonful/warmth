@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
-import { api } from '../../lib/api';
+import { api, API_URL } from '../../lib/api';
+
+function resolveImage(url) {
+  if (!url) return null;
+  return url.startsWith('http') ? url : `${API_URL}${url}`;
+}
 
 export default function Memories() {
   const router = useRouter();
@@ -42,10 +47,19 @@ export default function Memories() {
         onPress={() => router.push(`/memories/${item.id}`)}
         style={[styles.item, (item.is_new || item.repeat_requested_by_partner) && styles.itemNew]}
       >
-        <Text style={styles.date}>{formatDate(item.completed_at)}</Text>
-        <Text style={styles.itemTitle}>{item.title}</Text>
-        <Text style={styles.itemTagline}>{item.tagline}</Text>
-        <Text style={styles.category}>{item.category_name}</Text>
+        <View style={styles.topRow}>
+          {item.image_url ? (
+            <Image source={{ uri: resolveImage(item.image_url) }} style={styles.thumb} />
+          ) : (
+            <View style={[styles.thumb, styles.thumbPlaceholder]} />
+          )}
+          <View style={styles.topText}>
+            <Text style={styles.date}>{formatDate(item.completed_at)}</Text>
+            <Text style={styles.itemTitle}>{item.title}</Text>
+            <Text style={styles.itemTagline}>{item.tagline}</Text>
+            <Text style={styles.category}>{item.category_name}</Text>
+          </View>
+        </View>
         {row('You', item.you_rating, item.you_note)}
         {row(partner, item.partner_rating, item.partner_note)}
         {item.repeat_requested_by_partner && (
@@ -115,6 +129,10 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   itemNew: { borderColor: colors.accent },
+  topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
+  topText: { flex: 1 },
+  thumb: { width: 56, height: 72, borderRadius: 12, backgroundColor: colors.bg },
+  thumbPlaceholder: { borderWidth: 1, borderColor: colors.line || '#eee' },
   repeatFlag: { marginTop: 10, fontSize: 13, color: colors.accent, fontWeight: '500' },
   repeatPending: { marginTop: 10, fontSize: 13, color: colors.textMuted, fontStyle: 'italic' },
   date: { fontSize: 12, color: colors.accent, marginBottom: 6 },
