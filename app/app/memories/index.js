@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   itemNew: { borderColor: colors.accent },
   topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
   topText: { flex: 1 },
-  thumb: { width: 56, height: 72, borderRadius: 12, backgroundColor: colors.bg },
+  thumb: { width: 96, height: 110, borderRadius: 12, backgroundColor: colors.bg },
   thumbPlaceholder: { borderWidth: 1, borderColor: colors.line || '#eee' },
   repeatFlag: { marginTop: 10, fontSize: 13, color: colors.accent, fontWeight: '500' },
   repeatPending: { marginTop: 10, fontSize: 13, color: colors.textMuted, fontStyle: 'italic' },
