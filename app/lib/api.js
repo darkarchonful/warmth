@@ -204,6 +204,7 @@ export const api = {
   }),
   uploadMemoryPhoto: (id, fileUri, width, height) => uploadMemoryPhoto(id, fileUri, width, height),
   deleteMemoryPhoto: (memoryId, photoId) => request(`/memories/${memoryId}/photo/${photoId}`, { method: 'DELETE' }),
+  reorderMemories: (ids) => request('/memories/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
 
   // Comments
   getComments: (parentType, id) => request(`/comments/${parentType}/${id}`),

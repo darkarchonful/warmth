@@ -1515,7 +1515,8 @@ app.get('/memories', auth, async (req, res) => {
             m.repeat_requested_by, m.repeat_requested_at, m.journey_steps
      FROM memories m
      WHERE m.couple_id = $1
-     ORDER BY m.completed_at DESC`,
+     ORDER BY date_trunc('month', m.completed_at) DESC,
+              COALESCE(m.sort_rank, extract(epoch FROM m.completed_at)) DESC`,
     [cid]
   );
   // Each partner can add a few photos (cap enforced on upload); collect all
@@ -1696,6 +1697,30 @@ app.delete('/memories/:id/photo/:pid', auth, async (req, res) => {
   await pool.query(
     'UPDATE memories SET updated_at = NOW() WHERE id = $1 AND couple_id = $2',
     [req.params.id, couple.rows[0].id]
+  );
+  res.json({ ok: true });
+});
+
+// Save a couple's manual memory order (drag-to-reorder). Body: { ids: [...] } —
+// the memory ids of ONE month in their new top-to-bottom order. Assign rank by
+// position (first = highest); month-first ordering means ranks only ever
+// compete within that month. Couple-scoped so you can't touch another couple's.
+app.post('/memories/reorder', auth, async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isInteger) : null;
+  if (!ids || ids.length === 0) return res.status(400).json({ error: 'No ids' });
+  const couple = await pool.query(
+    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    [req.user.id]
+  );
+  if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
+  // rank = N - ordinality: first id gets the highest rank. Deliberately does
+  // NOT bump updated_at — reordering isn't a "new memory" for the partner.
+  await pool.query(
+    `UPDATE memories m
+        SET sort_rank = ($2::int - x.ord)
+       FROM unnest($1::int[]) WITH ORDINALITY AS x(id, ord)
+      WHERE m.id = x.id AND m.couple_id = $3`,
+    [ids, ids.length, couple.rows[0].id]
   );
   res.json({ ok: true });
 });
