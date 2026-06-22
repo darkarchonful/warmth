@@ -1,14 +1,11 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator, Modal } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { colors } from '../../lib/colors';
-import { api, API_URL } from '../../lib/api';
+import { api, imageSource } from '../../lib/api';
 import CommentThread from '../../components/CommentThread';
-
-function resolveImage(url) {
-  if (!url) return null;
-  return url.startsWith('http') ? url : `${API_URL}${url}`;
-}
 
 export default function MemoryDetail() {
   const router = useRouter();
@@ -19,6 +16,7 @@ export default function MemoryDetail() {
   const [noteDraft, setNoteDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   async function reload() {
     const list = await api.getMemories();
@@ -69,6 +67,50 @@ export default function MemoryDetail() {
     setBusy(false);
   }
 
+  // Pick a photo from the library, resize/compress it on-device, and upload it
+  // as this memory's couple photo (replaces the activity art for both partners).
+  async function pickAndUpload() {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Photo access needed', 'Allow photo access in Settings to add your own picture.');
+        return;
+      }
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 1,
+      });
+      if (picked.canceled || !picked.assets?.length) return;
+      setPhotoBusy(true);
+      const manip = await ImageManipulator.manipulateAsync(
+        picked.assets[0].uri,
+        [{ resize: { width: 1280 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      await api.uploadMemoryPhoto(item.id, manip.uri, manip.width, manip.height);
+      await reload();
+    } catch (e) {
+      Alert.alert('Could not add photo', e.message);
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  function removePhoto() {
+    Alert.alert('Remove your photo?', 'This goes back to the card artwork.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove', style: 'destructive', onPress: async () => {
+          setPhotoBusy(true);
+          try { await api.deleteMemoryPhoto(item.id); await reload(); }
+          catch (e) { Alert.alert('Could not remove', e.message); }
+          finally { setPhotoBusy(false); }
+        },
+      },
+    ]);
+  }
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -98,19 +140,35 @@ export default function MemoryDetail() {
 
   const partner = item.partner_name || 'Partner';
   const hasPartnerReaction = item.partner_rating || item.partner_note;
+  // Prefer the couple's own uploaded photo over the activity card art.
+  const displayUrl = item.photo_url || item.image_url;
+  const hasOwnPhoto = !!item.photo_url;
 
   const headerContent = (
     <View>
       <View style={styles.headerCard}>
-        {item.image_url && (
+        {displayUrl && (
           <TouchableOpacity activeOpacity={0.85} onPress={() => setViewerOpen(true)}>
-            <Image source={{ uri: resolveImage(item.image_url) }} style={styles.image} resizeMode="cover" />
+            <Image source={imageSource(displayUrl)} style={styles.image} resizeMode="cover" />
           </TouchableOpacity>
         )}
         <View style={styles.meta}>
           <Text style={styles.title}>{item.title}</Text>
           {item.tagline ? <Text style={styles.tagline}>{item.tagline}</Text> : null}
         </View>
+      </View>
+
+      <View style={styles.photoCtaRow}>
+        <TouchableOpacity onPress={pickAndUpload} disabled={photoBusy} style={styles.photoCtaBtn}>
+          <Text style={styles.photoCtaText}>
+            {photoBusy ? 'Working…' : (hasOwnPhoto ? '📷 Change your photo' : '📷 Add your own photo')}
+          </Text>
+        </TouchableOpacity>
+        {hasOwnPhoto && !photoBusy && (
+          <TouchableOpacity onPress={removePhoto} style={styles.photoRemoveBtn}>
+            <Text style={styles.photoRemoveText}>Remove</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {item.journey_steps && item.journey_steps.length > 0 && (
@@ -199,7 +257,7 @@ export default function MemoryDetail() {
         <CommentThread parentType="memory" parentId={item.id} meId={meId} header={headerContent} />
       </View>
 
-      {item.image_url && (
+      {displayUrl && (
         <Modal
           visible={viewerOpen}
           transparent
@@ -208,7 +266,7 @@ export default function MemoryDetail() {
           onRequestClose={() => setViewerOpen(false)}
         >
           <TouchableOpacity style={styles.viewerBackdrop} activeOpacity={1} onPress={() => setViewerOpen(false)}>
-            <Image source={{ uri: resolveImage(item.image_url) }} style={styles.viewerImage} resizeMode="contain" />
+            <Image source={imageSource(displayUrl)} style={styles.viewerImage} resizeMode="contain" />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.viewerClose}
@@ -316,6 +374,18 @@ const styles = StyleSheet.create({
   },
   repeatPendingText: { fontSize: 13, color: colors.textLight, fontStyle: 'italic', flex: 1 },
   repeatCancelLink: { color: colors.accent, fontSize: 13, fontWeight: '500', marginLeft: 8 },
+  photoCtaRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginBottom: 14, gap: 10 },
+  photoCtaBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    alignItems: 'center',
+  },
+  photoCtaText: { color: colors.accent, fontSize: 14, fontWeight: '500' },
+  photoRemoveBtn: { paddingVertical: 10, paddingHorizontal: 14 },
+  photoRemoveText: { color: colors.textMuted, fontSize: 13 },
   viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)', alignItems: 'center', justifyContent: 'center' },
   viewerImage: { width: '100%', height: '82%' },
   viewerClose: { position: 'absolute', top: 60, right: 24 },

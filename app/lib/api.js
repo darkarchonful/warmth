@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
+import * as FileSystem from 'expo-file-system/legacy';
 
 // Keep the app-icon badge in sync with the in-app unread total. Called after
 // every /me so reading plans/memories (which zeroes the server counts) clears
@@ -90,6 +91,37 @@ async function request(path, options = {}) {
   return data;
 }
 
+// Build an <Image source> for an API-served image. Couple photos
+// (/memories/:id/photo) require the auth header; the public activity art
+// (/images/activities/*) ignores it. Passing the header for both is harmless
+// and lets callers use one helper everywhere.
+export function imageSource(url) {
+  if (!url) return null;
+  const uri = url.startsWith('http') ? url : `${API_URL}${url}`;
+  return token ? { uri, headers: { Authorization: `Bearer ${token}` } } : { uri };
+}
+
+// Upload (or replace) a couple's own photo for a memory. Streams the resized
+// JPEG file as the raw request body (matches the server's express.raw route).
+export async function uploadMemoryPhoto(id, fileUri, width, height) {
+  const res = await FileSystem.uploadAsync(`${API_URL}/memories/${id}/photo`, fileUri, {
+    httpMethod: 'POST',
+    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    headers: {
+      'Content-Type': 'image/jpeg',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(width ? { 'X-Image-Width': String(width) } : {}),
+      ...(height ? { 'X-Image-Height': String(height) } : {}),
+    },
+  });
+  if (res.status < 200 || res.status >= 300) {
+    let msg = `Upload failed (${res.status})`;
+    try { const j = JSON.parse(res.body); if (j.error) msg = j.error; } catch {}
+    throw new Error(msg);
+  }
+  try { return JSON.parse(res.body); } catch { return {}; }
+}
+
 export const api = {
   // Auth
   authGoogle: (idToken) => request('/auth/google', {
@@ -164,6 +196,8 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ liked }),
   }),
+  uploadMemoryPhoto: (id, fileUri, width, height) => uploadMemoryPhoto(id, fileUri, width, height),
+  deleteMemoryPhoto: (id) => request(`/memories/${id}/photo`, { method: 'DELETE' }),
 
   // Comments
   getComments: (parentType, id) => request(`/comments/${parentType}/${id}`),

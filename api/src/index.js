@@ -1398,14 +1398,16 @@ app.get('/memories', auth, async (req, res) => {
   const isA = user_a_id === req.user.id;
 
   const memories = await pool.query(
-    `SELECT id, couple_id, checklist_id, photo_url, completed_at, updated_at,
-            activity_title AS title, activity_tagline AS tagline,
-            activity_image_url AS image_url, activity_category AS category_name,
-            rating_a, rating_b, mood_a, mood_b, note_a, note_b,
-            repeat_requested_by, repeat_requested_at, journey_steps
-     FROM memories
-     WHERE couple_id = $1
-     ORDER BY completed_at DESC`,
+    `SELECT m.id, m.couple_id, m.checklist_id, m.completed_at, m.updated_at,
+            m.activity_title AS title, m.activity_tagline AS tagline,
+            m.activity_image_url AS image_url, m.activity_category AS category_name,
+            m.rating_a, m.rating_b, m.mood_a, m.mood_b, m.note_a, m.note_b,
+            m.repeat_requested_by, m.repeat_requested_at, m.journey_steps,
+            mp.updated_at AS photo_updated_at
+     FROM memories m
+     LEFT JOIN memory_photos mp ON mp.memory_id = m.id
+     WHERE m.couple_id = $1
+     ORDER BY m.completed_at DESC`,
     [cid]
   );
   const seen = await pool.query('SELECT last_memories_viewed_at FROM users WHERE id = $1', [req.user.id]);
@@ -1413,7 +1415,10 @@ app.get('/memories', auth, async (req, res) => {
 
   const payload = memories.rows.map(r => ({
     id: r.id, couple_id: r.couple_id, checklist_id: r.checklist_id,
-    photo_url: r.photo_url, completed_at: r.completed_at, updated_at: r.updated_at,
+    photo_url: r.photo_updated_at
+      ? `/memories/${r.id}/photo?v=${new Date(r.photo_updated_at).getTime()}`
+      : null,
+    completed_at: r.completed_at, updated_at: r.updated_at,
     title: r.title, tagline: r.tagline, image_url: r.image_url, category_name: r.category_name,
     journey_steps: r.journey_steps,
     you_rating: isA ? r.rating_a : r.rating_b,
@@ -1474,6 +1479,88 @@ app.patch('/memories/:id', auth, async (req, res) => {
   }
 
   res.json(result.rows[0]);
+});
+
+// --- Couple photo for a memory (stored in Postgres, see migration 035) ---
+// Raw image body; the phone resizes/compresses before upload. express.json()
+// (global) ignores image/* content-types, so this route-level parser owns the
+// body.
+const photoUpload = express.raw({ type: ['image/jpeg', 'image/png'], limit: '8mb' });
+
+// Upload or replace the couple's own photo for a memory. Couple-scoped.
+app.post('/memories/:id/photo', auth, photoUpload, async (req, res) => {
+  const couple = await pool.query(
+    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    [req.user.id]
+  );
+  if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
+  const mem = await pool.query(
+    'SELECT id FROM memories WHERE id = $1 AND couple_id = $2',
+    [req.params.id, couple.rows[0].id]
+  );
+  if (mem.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+    return res.status(400).json({ error: 'No image data' });
+  }
+  const ct = req.headers['content-type'];
+  const mime = ct && ct.startsWith('image/') ? ct : 'image/jpeg';
+  const width = parseInt(req.headers['x-image-width']) || null;
+  const height = parseInt(req.headers['x-image-height']) || null;
+
+  await pool.query(
+    `INSERT INTO memory_photos (memory_id, data, mime, width, height, uploaded_by, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW())
+     ON CONFLICT (memory_id) DO UPDATE
+       SET data = EXCLUDED.data, mime = EXCLUDED.mime, width = EXCLUDED.width,
+           height = EXCLUDED.height, uploaded_by = EXCLUDED.uploaded_by, updated_at = NOW()`,
+    [req.params.id, req.body, mime, width, height, req.user.id]
+  );
+  // Bump the memory so the partner sees it as new / re-sorted.
+  const bumped = await pool.query(
+    'UPDATE memories SET updated_at = NOW() WHERE id = $1 RETURNING updated_at',
+    [req.params.id]
+  );
+  const v = new Date(bumped.rows[0].updated_at).getTime();
+  res.json({ ok: true, photo_url: `/memories/${req.params.id}/photo?v=${v}` });
+});
+
+// Stream the couple photo. Couple-scoped so photos never leak across couples.
+app.get('/memories/:id/photo', auth, async (req, res) => {
+  const couple = await pool.query(
+    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    [req.user.id]
+  );
+  if (couple.rows.length === 0) return res.status(404).end();
+  const row = await pool.query(
+    `SELECT mp.data, mp.mime FROM memory_photos mp
+     JOIN memories m ON m.id = mp.memory_id
+     WHERE mp.memory_id = $1 AND m.couple_id = $2`,
+    [req.params.id, couple.rows[0].id]
+  );
+  if (row.rows.length === 0) return res.status(404).end();
+  // Each upload gets a fresh ?v= URL, so a given URL is genuinely immutable.
+  res.set('Content-Type', row.rows[0].mime);
+  res.set('Cache-Control', 'private, max-age=31536000, immutable');
+  res.send(row.rows[0].data);
+});
+
+// Remove the couple photo -> the memory reverts to its activity art.
+app.delete('/memories/:id/photo', auth, async (req, res) => {
+  const couple = await pool.query(
+    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
+    [req.user.id]
+  );
+  if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
+  await pool.query(
+    `DELETE FROM memory_photos mp USING memories m
+     WHERE mp.memory_id = m.id AND mp.memory_id = $1 AND m.couple_id = $2`,
+    [req.params.id, couple.rows[0].id]
+  );
+  await pool.query(
+    'UPDATE memories SET updated_at = NOW() WHERE id = $1 AND couple_id = $2',
+    [req.params.id, couple.rows[0].id]
+  );
+  res.json({ ok: true });
 });
 
 // One partner asks to do this activity again. Stored on the memory; partner
