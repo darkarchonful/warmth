@@ -1,20 +1,27 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, Image, Animated } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, imageSource } from '../../lib/api';
 
 // One scatter card: springs in (fade + scale-from-0.6 + tilt), staggered by
-// index — same entrance as the Time-to-act scatter. Re-plays whenever `nonce`
-// changes (i.e. each time the screen is focused), without remounting the image.
-function AnimatedStackCard({ url, index, tilt, tx, nonce }) {
+// index — same entrance as the Time-to-act scatter. Plays when the row scrolls
+// into view (`active` goes true), and re-arms when it scrolls back out, so the
+// entrance isn't wasted off-screen on a long list.
+function AnimatedStackCard({ url, index, tilt, tx, active }) {
   const enter = useRef(new Animated.Value(0)).current;
+  const played = useRef(false);
   useEffect(() => {
-    enter.setValue(0);
-    Animated.spring(enter, {
-      toValue: 1, friction: 6, tension: 55, delay: index * 130, useNativeDriver: true,
-    }).start();
-  }, [nonce]);
+    if (active && !played.current) {
+      played.current = true;
+      enter.setValue(0);
+      Animated.spring(enter, {
+        toValue: 1, friction: 6, tension: 55, delay: index * 130, useNativeDriver: true,
+      }).start();
+    } else if (!active) {
+      played.current = false; // re-arm so it animates again next time it enters
+    }
+  }, [active]);
   return (
     <Animated.Image
       source={imageSource(url)}
@@ -33,7 +40,7 @@ function AnimatedStackCard({ url, index, tilt, tx, nonce }) {
 
 // Each partner's own photo, shown as a small tilted stack (Time-to-act style).
 // One photo -> static upright thumbnail; two -> animated overlapping pair.
-function PhotoStack({ photos, nonce }) {
+function PhotoStack({ photos, active }) {
   const imgs = photos.slice(0, 2);
   // A single photo reads as a normal, upright thumbnail — only a pair scatters.
   if (imgs.length === 1) {
@@ -41,8 +48,8 @@ function PhotoStack({ photos, nonce }) {
   }
   return (
     <View style={styles.stackWrap}>
-      <AnimatedStackCard url={imgs[0].url} index={0} tilt="-9deg" tx={-9} nonce={nonce} />
-      <AnimatedStackCard url={imgs[1].url} index={1} tilt="8deg" tx={9} nonce={nonce} />
+      <AnimatedStackCard url={imgs[0].url} index={0} tilt="-9deg" tx={-9} active={active} />
+      <AnimatedStackCard url={imgs[1].url} index={1} tilt="8deg" tx={9} active={active} />
     </View>
   );
 }
@@ -51,20 +58,18 @@ export default function Memories() {
   const router = useRouter();
   const [memories, setMemories] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
-  // Bumped on every screen focus so the photo scatter re-plays its entrance
-  // each time you land here (cards animate on mount too). Skips the very first
-  // focus, which coincides with mount.
-  const [stackNonce, setStackNonce] = useState(0);
-  const firstFocus = useRef(true);
+  // Which memory rows are currently on screen — drives the scatter entrance so
+  // it plays as a card scrolls into view, not while it's off-screen. The
+  // callback + config must be stable refs (RN forbids changing them on the fly).
+  const [visibleIds, setVisibleIds] = useState(() => new Set());
+  const onViewRef = useRef(({ viewableItems }) => {
+    setVisibleIds(new Set(viewableItems.map((v) => v.item?.id).filter((x) => x != null)));
+  });
+  const viewConfigRef = useRef({ itemVisiblePercentThreshold: 45 });
 
   useEffect(() => {
     load();
   }, []);
-
-  useFocusEffect(useCallback(() => {
-    if (firstFocus.current) { firstFocus.current = false; return; }
-    setStackNonce((n) => n + 1);
-  }, []));
 
   async function load() {
     setRefreshing(true);
@@ -120,7 +125,7 @@ export default function Memories() {
       >
         <View style={styles.topRow}>
           {item.photos && item.photos.length > 0 ? (
-            <PhotoStack photos={item.photos} nonce={stackNonce} />
+            <PhotoStack photos={item.photos} active={visibleIds.has(item.id)} />
           ) : item.image_url ? (
             <Image source={imageSource(item.image_url)} style={styles.thumb} />
           ) : (
@@ -170,7 +175,9 @@ export default function Memories() {
             sections.length > 1 ? <Text style={styles.sectionHeader}>{section.title}</Text> : null
           )}
           keyExtractor={(item) => item.id.toString()}
-          extraData={stackNonce}
+          extraData={visibleIds}
+          onViewableItemsChanged={onViewRef.current}
+          viewabilityConfig={viewConfigRef.current}
           contentContainerStyle={{ padding: 20 }}
           stickySectionHeadersEnabled={false}
           refreshing={refreshing}
