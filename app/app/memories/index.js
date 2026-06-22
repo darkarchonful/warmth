@@ -2,12 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, SectionList, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
-import { api, API_URL } from '../../lib/api';
-
-function resolveImage(url) {
-  if (!url) return null;
-  return url.startsWith('http') ? url : `${API_URL}${url}`;
-}
+import { api, imageSource } from '../../lib/api';
 
 export default function Memories() {
   const router = useRouter();
@@ -71,8 +66,8 @@ export default function Memories() {
         style={[styles.item, (item.is_new || item.repeat_requested_by_partner) && styles.itemNew]}
       >
         <View style={styles.topRow}>
-          {item.image_url ? (
-            <Image source={{ uri: resolveImage(item.image_url) }} style={styles.thumb} />
+          {(item.photo_url || item.image_url) ? (
+            <Image source={imageSource(item.photo_url || item.image_url)} style={styles.thumb} />
           ) : (
             <View style={[styles.thumb, styles.thumbPlaceholder]} />
           )}
