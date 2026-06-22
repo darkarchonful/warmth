@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import { setUnauthorizedHandler, clearToken } from '../lib/api';
+import { routeFromNotification, markNotReady } from '../lib/deeplink';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function RootLayout() {
   // swallow their own errors.
   useEffect(() => {
     setUnauthorizedHandler(async () => {
+      markNotReady();
       await clearToken();
       router.replace('/');
     });
@@ -28,7 +30,11 @@ export default function RootLayout() {
       if (id && handled.current.has(id)) return;
       if (id) handled.current.add(id);
       const route = response?.notification?.request?.content?.data?.route;
-      if (route) router.push(route);
+      // Don't navigate straight away: on a cold start this races index.js's
+      // router.replace('/swipe') and the deep-link gets clobbered (lands on the
+      // deck). Hand the route to the coordinator — it navigates now if the deck
+      // is already up, otherwise the deck flushes it once it mounts.
+      if (route) routeFromNotification(route, (r) => router.push(r));
     }
 
     // Defer touching the notifications native module until after the app has
