@@ -80,6 +80,21 @@ export default function MemoryDetail() {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [galleryStart, setGalleryStart] = useState(0);
   const [photoBusy, setPhotoBusy] = useState(false);
+  // Swipe-down-to-dismiss for the full-screen gallery: a one-finger vertical
+  // drag moves the photo down and fades the backdrop; releasing past a
+  // threshold (or a fast flick) closes it.
+  const dragY = useRef(new Animated.Value(0)).current;
+  const onDismissEvent = Animated.event([{ nativeEvent: { translationY: dragY } }], { useNativeDriver: true });
+  const onDismissState = (e) => {
+    if (e.nativeEvent.oldState === State.ACTIVE) {
+      if (e.nativeEvent.translationY > 120 || e.nativeEvent.velocityY > 800) {
+        setViewerOpen(false);
+        dragY.setValue(0);
+      } else {
+        Animated.spring(dragY, { toValue: 0, useNativeDriver: true, friction: 7 }).start();
+      }
+    }
+  };
 
   async function reload() {
     const list = await api.getMemories();
@@ -214,6 +229,7 @@ export default function MemoryDetail() {
     : (item.image_url ? [{ id: null, url: item.image_url, label: '', mine: false }] : []);
 
   function openGallery(i) {
+    dragY.setValue(0);
     setGalleryStart(i);
     setViewerOpen(true);
   }
@@ -352,31 +368,45 @@ export default function MemoryDetail() {
         >
           {/* Modals render outside the app's root GestureHandlerRootView, so
               the pinch/pan/tap handlers need their own root here. */}
-          <GestureHandlerRootView style={styles.viewerBackdrop}>
-            <FlatList
-              data={cards}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              initialScrollIndex={Math.min(galleryStart, cards.length - 1)}
-              getItemLayout={(_, i) => ({ length: SCREEN_W, offset: SCREEN_W * i, index: i })}
-              keyExtractor={(_, i) => String(i)}
-              renderItem={({ item: g }) => (
-                <TapGestureHandler onActivated={() => setViewerOpen(false)}>
-                  <View style={styles.viewerPage}>
-                    <ZoomableImage source={imageSource(g.url)} />
-                    {g.label ? <Text style={styles.viewerLabel}>{g.label}</Text> : null}
-                  </View>
-                </TapGestureHandler>
-              )}
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            {/* Dark backdrop, fades as you drag down to dismiss. */}
+            <Animated.View
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, {
+                backgroundColor: '#000',
+                opacity: dragY.interpolate({ inputRange: [0, 260], outputRange: [0.94, 0.1], extrapolate: 'clamp' }),
+              }]}
             />
-            <TouchableOpacity
-              style={styles.viewerClose}
-              onPress={() => setViewerOpen(false)}
-              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            {/* One-finger vertical pan dismisses; failOffsetX lets a horizontal
+                swipe fall through to the gallery's paging, and maxPointers={1}
+                keeps two-finger pinch-zoom separate. */}
+            <PanGestureHandler
+              maxPointers={1}
+              activeOffsetY={[-14, 14]}
+              failOffsetX={[-18, 18]}
+              onGestureEvent={onDismissEvent}
+              onHandlerStateChange={onDismissState}
             >
-              <Text style={styles.viewerCloseText}>✕</Text>
-            </TouchableOpacity>
+              <Animated.View style={{ flex: 1, transform: [{ translateY: dragY }] }}>
+                <FlatList
+                  data={cards}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  initialScrollIndex={Math.min(galleryStart, cards.length - 1)}
+                  getItemLayout={(_, i) => ({ length: SCREEN_W, offset: SCREEN_W * i, index: i })}
+                  keyExtractor={(_, i) => String(i)}
+                  renderItem={({ item: g }) => (
+                    <TapGestureHandler onActivated={() => setViewerOpen(false)}>
+                      <View style={styles.viewerPage}>
+                        <ZoomableImage source={imageSource(g.url)} />
+                        {g.label ? <Text style={styles.viewerLabel}>{g.label}</Text> : null}
+                      </View>
+                    </TapGestureHandler>
+                  )}
+                />
+              </Animated.View>
+            </PanGestureHandler>
           </GestureHandlerRootView>
         </Modal>
       )}
@@ -502,12 +532,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   photoCtaText: { color: colors.accent, fontSize: 14, fontWeight: '500' },
-  viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)' },
   viewerPage: { width: SCREEN_W, height: '100%', alignItems: 'center', justifyContent: 'center' },
   viewerImage: { width: SCREEN_W, height: '82%' },
   viewerLabel: { position: 'absolute', bottom: 70, color: '#fff', fontSize: 14, fontWeight: '500', opacity: 0.85 },
-  viewerClose: { position: 'absolute', top: 60, right: 24 },
-  viewerCloseText: { color: '#fff', fontSize: 30, fontWeight: '300' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   goneTitle: { fontSize: 18, color: colors.text, fontWeight: '500', textAlign: 'center', marginBottom: 8 },
   goneBody: { fontSize: 14, color: colors.textLight, textAlign: 'center', marginBottom: 24 },
