@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, SectionList, TouchableOpacity, Image, Animated } from 'react-native';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Animated } from 'react-native';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, imageSource } from '../../lib/api';
@@ -63,7 +64,7 @@ export default function Memories() {
   // callback + config must be stable refs (RN forbids changing them on the fly).
   const [visibleIds, setVisibleIds] = useState(() => new Set());
   const onViewRef = useRef(({ viewableItems }) => {
-    setVisibleIds(new Set(viewableItems.map((v) => v.item?.id).filter((x) => x != null)));
+    setVisibleIds(new Set(viewableItems.map((v) => v.item?.memory?.id).filter((x) => x != null)));
   });
   const viewConfigRef = useRef({ itemVisiblePercentThreshold: 45 });
 
@@ -81,27 +82,31 @@ export default function Memories() {
     }
   }
 
-  // Group memories into month sections. The API already returns them
-  // completed_at DESC, so months come newest-first and each month's cards
-  // stay newest-first — keeps a long history readable instead of one endless
-  // flat list. Year is shown only for past years.
-  const sections = useMemo(() => {
+  // Flatten into a single draggable list: a month-header row before each month
+  // (only when the history spans 2+ months), then that month's memory rows.
+  const { listData } = useMemo(() => {
     const now = new Date();
-    const groups = [];
-    const byKey = {};
+    const monthsSeen = new Set();
+    for (const m of memories) {
+      const d = new Date(m.completed_at);
+      monthsSeen.add(`${d.getFullYear()}-${d.getMonth()}`);
+    }
+    const multi = monthsSeen.size > 1;
+    const rows = [];
+    let last = null;
     for (const m of memories) {
       const d = new Date(m.completed_at);
       const key = `${d.getFullYear()}-${d.getMonth()}`;
-      if (!(key in byKey)) {
-        byKey[key] = groups.length;
+      if (multi && key !== last) {
+        last = key;
         const title = d.getFullYear() === now.getFullYear()
           ? d.toLocaleDateString('en-US', { month: 'long' })
           : d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-        groups.push({ title, data: [] });
+        rows.push({ type: 'header', key: `h-${key}`, title });
       }
-      groups[byKey[key]].data.push(m);
+      rows.push({ type: 'item', key: `m-${m.id}`, memory: m });
     }
-    return groups;
+    return { listData: rows, multiMonth: multi };
   }, [memories]);
 
   function formatDate(dateStr) {
@@ -109,9 +114,36 @@ export default function Memories() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  function renderItem({ item }) {
-    const partner = item.partner_name || 'Partner';
-    const row = (who, rating, note) => (
+  // After a drag, clamp items back into their real month (newest month first),
+  // keeping the dragged sequence within each month, then persist that month's
+  // new order. So you can shuffle a memory up/down within its month.
+  const onDragEnd = useCallback(({ data, to }) => {
+    const items = data.filter((r) => r.type === 'item').map((r) => r.memory);
+    const byMonth = new Map();
+    for (const m of items) {
+      const d = new Date(m.completed_at);
+      const k = d.getFullYear() * 100 + d.getMonth();
+      if (!byMonth.has(k)) byMonth.set(k, []);
+      byMonth.get(k).push(m);
+    }
+    const ordered = [...byMonth.keys()].sort((a, b) => b - a).flatMap((k) => byMonth.get(k));
+    setMemories(ordered);
+    const movedRow = data[to];
+    const moved = movedRow?.type === 'item' ? movedRow.memory : null;
+    if (moved) {
+      const d = new Date(moved.completed_at);
+      const k = d.getFullYear() * 100 + d.getMonth();
+      api.reorderMemories(byMonth.get(k).map((m) => m.id)).catch(() => {});
+    }
+  }, []);
+
+  const renderRow = useCallback(({ item: row, drag, isActive }) => {
+    if (row.type === 'header') {
+      return <Text style={styles.sectionHeader}>{row.title}</Text>;
+    }
+    const m = row.memory;
+    const partner = m.partner_name || 'Partner';
+    const ratingRow = (who, rating, note) => (
       <View style={styles.perUserRow}>
         <Text style={styles.whoLabel}>{who}</Text>
         <Text style={styles.rowRating}>{rating ? '★'.repeat(rating) + '☆'.repeat(5 - rating) : '—'}</Text>
@@ -119,36 +151,42 @@ export default function Memories() {
       </View>
     );
     return (
-      <TouchableOpacity
-        onPress={() => router.push(`/memories/${item.id}`)}
-        style={[styles.item, (item.is_new || item.repeat_requested_by_partner) && styles.itemNew]}
-      >
-        <View style={styles.topRow}>
-          {item.photos && item.photos.length > 0 ? (
-            <PhotoStack photos={item.photos} active={visibleIds.has(item.id)} />
-          ) : item.image_url ? (
-            <Image source={imageSource(item.image_url)} style={styles.thumb} />
-          ) : (
-            <View style={[styles.thumb, styles.thumbPlaceholder]} />
-          )}
-          <View style={styles.topText}>
-            <Text style={styles.date}>{formatDate(item.completed_at)}</Text>
-            <Text style={styles.itemTitle}>{item.title}</Text>
-            <Text style={styles.itemTagline}>{item.tagline}</Text>
-            <Text style={styles.category}>{item.category_name}</Text>
+      <ScaleDecorator activeScale={1.04}>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => { if (!isActive) router.push(`/memories/${m.id}`); }}
+          onLongPress={drag}
+          delayLongPress={180}
+          disabled={isActive}
+          style={[styles.item, (m.is_new || m.repeat_requested_by_partner) && styles.itemNew, isActive && styles.itemDragging]}
+        >
+          <View style={styles.topRow}>
+            {m.photos && m.photos.length > 0 ? (
+              <PhotoStack photos={m.photos} active={visibleIds.has(m.id)} />
+            ) : m.image_url ? (
+              <Image source={imageSource(m.image_url)} style={styles.thumb} />
+            ) : (
+              <View style={[styles.thumb, styles.thumbPlaceholder]} />
+            )}
+            <View style={styles.topText}>
+              <Text style={styles.date}>{formatDate(m.completed_at)}</Text>
+              <Text style={styles.itemTitle}>{m.title}</Text>
+              <Text style={styles.itemTagline}>{m.tagline}</Text>
+              <Text style={styles.category}>{m.category_name}</Text>
+            </View>
           </View>
-        </View>
-        {row('You', item.you_rating, item.you_note)}
-        {row(partner, item.partner_rating, item.partner_note)}
-        {item.repeat_requested_by_partner && (
-          <Text style={styles.repeatFlag}>↻ {partner} wants to do this again</Text>
-        )}
-        {item.repeat_requested_by_you && (
-          <Text style={styles.repeatPending}>↻ Waiting for {partner}</Text>
-        )}
-      </TouchableOpacity>
+          {ratingRow('You', m.you_rating, m.you_note)}
+          {ratingRow(partner, m.partner_rating, m.partner_note)}
+          {m.repeat_requested_by_partner && (
+            <Text style={styles.repeatFlag}>↻ {partner} wants to do this again</Text>
+          )}
+          {m.repeat_requested_by_you && (
+            <Text style={styles.repeatPending}>↻ Waiting for {partner}</Text>
+          )}
+        </TouchableOpacity>
+      </ScaleDecorator>
     );
-  }
+  }, [visibleIds, router]);
 
   return (
     <View style={styles.container}>
@@ -166,20 +204,17 @@ export default function Memories() {
           <Text style={styles.emptySubtext}>Complete an activity together to save it here</Text>
         </View>
       ) : (
-        <SectionList
-          sections={sections}
-          renderItem={renderItem}
-          renderSectionHeader={({ section }) => (
-            // Only label months once the history actually spans more than one —
-            // a single-month list stays a plain list, no header noise.
-            sections.length > 1 ? <Text style={styles.sectionHeader}>{section.title}</Text> : null
-          )}
-          keyExtractor={(item) => item.id.toString()}
+        <DraggableFlatList
+          data={listData}
+          keyExtractor={(row) => row.key}
+          renderItem={renderRow}
+          onDragEnd={onDragEnd}
+          activationDistance={12}
           extraData={visibleIds}
           onViewableItemsChanged={onViewRef.current}
           viewabilityConfig={viewConfigRef.current}
           contentContainerStyle={{ padding: 20 }}
-          stickySectionHeadersEnabled={false}
+          ListHeaderComponent={<Text style={styles.dragHint}>Hold a memory to reorder it</Text>}
           refreshing={refreshing}
           onRefresh={load}
         />
@@ -216,6 +251,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   itemNew: { borderColor: colors.accent },
+  itemDragging: { shadowOpacity: 0.18, shadowRadius: 16, elevation: 8, borderColor: colors.accent },
+  dragHint: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', textAlign: 'center', marginBottom: 12 },
   sectionHeader: {
     fontSize: 13,
     color: colors.textMuted,
