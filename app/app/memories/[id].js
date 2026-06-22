@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator, Modal } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, API_URL } from '../../lib/api';
@@ -18,6 +18,7 @@ export default function MemoryDetail() {
   const [busy, setBusy] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [loading, setLoading] = useState(true);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   async function reload() {
     const list = await api.getMemories();
@@ -102,7 +103,9 @@ export default function MemoryDetail() {
     <View>
       <View style={styles.headerCard}>
         {item.image_url && (
-          <Image source={{ uri: resolveImage(item.image_url) }} style={styles.image} resizeMode="cover" />
+          <TouchableOpacity activeOpacity={0.85} onPress={() => setViewerOpen(true)}>
+            <Image source={{ uri: resolveImage(item.image_url) }} style={styles.image} resizeMode="cover" />
+          </TouchableOpacity>
         )}
         <View style={styles.meta}>
           <Text style={styles.title}>{item.title}</Text>
@@ -195,6 +198,27 @@ export default function MemoryDetail() {
       <View style={{ flex: 1 }}>
         <CommentThread parentType="memory" parentId={item.id} meId={meId} header={headerContent} />
       </View>
+
+      {item.image_url && (
+        <Modal
+          visible={viewerOpen}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={() => setViewerOpen(false)}
+        >
+          <TouchableOpacity style={styles.viewerBackdrop} activeOpacity={1} onPress={() => setViewerOpen(false)}>
+            <Image source={{ uri: resolveImage(item.image_url) }} style={styles.viewerImage} resizeMode="contain" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.viewerClose}
+            onPress={() => setViewerOpen(false)}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+          >
+            <Text style={styles.viewerCloseText}>✕</Text>
+          </TouchableOpacity>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -292,6 +316,10 @@ const styles = StyleSheet.create({
   },
   repeatPendingText: { fontSize: 13, color: colors.textLight, fontStyle: 'italic', flex: 1 },
   repeatCancelLink: { color: colors.accent, fontSize: 13, fontWeight: '500', marginLeft: 8 },
+  viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)', alignItems: 'center', justifyContent: 'center' },
+  viewerImage: { width: '100%', height: '82%' },
+  viewerClose: { position: 'absolute', top: 60, right: 24 },
+  viewerCloseText: { color: '#fff', fontSize: 30, fontWeight: '300' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   goneTitle: { fontSize: 18, color: colors.text, fontWeight: '500', textAlign: 'center', marginBottom: 8 },
   goneBody: { fontSize: 14, color: colors.textLight, textAlign: 'center', marginBottom: 24 },
