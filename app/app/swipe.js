@@ -4,6 +4,7 @@ import { PinchGestureHandler, PanGestureHandler, State } from 'react-native-gest
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../lib/colors';
 import { api, API_URL } from '../lib/api';
+import { markReady } from '../lib/deeplink';
 import CoachCard from '../components/CoachCard';
 
 function resolveImage(url) {
@@ -107,6 +108,13 @@ export default function Swipe() {
   useEffect(() => {
     activityRef.current = activity;
   }, [activity]);
+
+  // The deck is the "app is ready" signal: the user is authenticated and on
+  // screen. Flush any deep-link a notification stashed during launch so it
+  // lands on the right screen instead of racing the boot navigation.
+  useEffect(() => {
+    markReady((r) => router.push(r));
+  }, []);
 
   function prefetchUpcoming() {
     queueRef.current.slice(0, 3).forEach(a => {
