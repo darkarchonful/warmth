@@ -1,12 +1,39 @@
-import { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, SectionList, TouchableOpacity, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, SectionList, TouchableOpacity, Image, Animated } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, imageSource } from '../../lib/api';
 
+// One scatter card: springs in (fade + scale-from-0.6 + tilt), staggered by
+// index — same entrance as the Time-to-act scatter. Re-plays whenever `nonce`
+// changes (i.e. each time the screen is focused), without remounting the image.
+function AnimatedStackCard({ url, index, tilt, tx, nonce }) {
+  const enter = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    enter.setValue(0);
+    Animated.spring(enter, {
+      toValue: 1, friction: 6, tension: 55, delay: index * 130, useNativeDriver: true,
+    }).start();
+  }, [nonce]);
+  return (
+    <Animated.Image
+      source={imageSource(url)}
+      style={[styles.stackCard, {
+        opacity: enter,
+        zIndex: index,
+        transform: [
+          { translateX: tx },
+          { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
+          { rotate: tilt },
+        ],
+      }]}
+    />
+  );
+}
+
 // Each partner's own photo, shown as a small tilted stack (Time-to-act style).
-// One photo -> single slightly-tilted card; two -> overlapping pair.
-function PhotoStack({ photos }) {
+// One photo -> static upright thumbnail; two -> animated overlapping pair.
+function PhotoStack({ photos, nonce }) {
   const imgs = photos.slice(0, 2);
   // A single photo reads as a normal, upright thumbnail — only a pair scatters.
   if (imgs.length === 1) {
@@ -14,8 +41,8 @@ function PhotoStack({ photos }) {
   }
   return (
     <View style={styles.stackWrap}>
-      <Image source={imageSource(imgs[0].url)} style={[styles.stackCard, { transform: [{ rotate: '-9deg' }, { translateX: -9 }] }]} />
-      <Image source={imageSource(imgs[1].url)} style={[styles.stackCard, { transform: [{ rotate: '8deg' }, { translateX: 9 }] }]} />
+      <AnimatedStackCard url={imgs[0].url} index={0} tilt="-9deg" tx={-9} nonce={nonce} />
+      <AnimatedStackCard url={imgs[1].url} index={1} tilt="8deg" tx={9} nonce={nonce} />
     </View>
   );
 }
@@ -24,10 +51,20 @@ export default function Memories() {
   const router = useRouter();
   const [memories, setMemories] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  // Bumped on every screen focus so the photo scatter re-plays its entrance
+  // each time you land here (cards animate on mount too). Skips the very first
+  // focus, which coincides with mount.
+  const [stackNonce, setStackNonce] = useState(0);
+  const firstFocus = useRef(true);
 
   useEffect(() => {
     load();
   }, []);
+
+  useFocusEffect(useCallback(() => {
+    if (firstFocus.current) { firstFocus.current = false; return; }
+    setStackNonce((n) => n + 1);
+  }, []));
 
   async function load() {
     setRefreshing(true);
@@ -83,7 +120,7 @@ export default function Memories() {
       >
         <View style={styles.topRow}>
           {item.photos && item.photos.length > 0 ? (
-            <PhotoStack photos={item.photos} />
+            <PhotoStack photos={item.photos} nonce={stackNonce} />
           ) : item.image_url ? (
             <Image source={imageSource(item.image_url)} style={styles.thumb} />
           ) : (
@@ -133,6 +170,7 @@ export default function Memories() {
             sections.length > 1 ? <Text style={styles.sectionHeader}>{section.title}</Text> : null
           )}
           keyExtractor={(item) => item.id.toString()}
+          extraData={stackNonce}
           contentContainerStyle={{ padding: 20 }}
           stickySectionHeadersEnabled={false}
           refreshing={refreshing}
