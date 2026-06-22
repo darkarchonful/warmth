@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator, Modal, FlatList, Dimensions } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { colors } from '../../lib/colors';
 import { api, imageSource } from '../../lib/api';
 import CommentThread from '../../components/CommentThread';
+
+const SCREEN_W = Dimensions.get('window').width;
 
 export default function MemoryDetail() {
   const router = useRouter();
@@ -16,6 +18,7 @@ export default function MemoryDetail() {
   const [noteDraft, setNoteDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [galleryStart, setGalleryStart] = useState(0);
   const [photoBusy, setPhotoBusy] = useState(false);
 
   async function reload() {
@@ -140,17 +143,31 @@ export default function MemoryDetail() {
 
   const partner = item.partner_name || 'Partner';
   const hasPartnerReaction = item.partner_rating || item.partner_note;
-  // Prefer the couple's own uploaded photo over the activity card art.
-  const displayUrl = item.photo_url || item.image_url;
-  const hasOwnPhoto = !!item.photo_url;
+  // Each partner's own photo (yours first). Fall back to the activity art when
+  // neither has added one yet.
+  const photos = item.photos || [];
+  const youHavePhoto = photos.some(p => p.mine);
+  const galleryImages = photos.length
+    ? photos.map(p => ({ url: p.url, label: p.mine ? 'You' : partner }))
+    : (item.image_url ? [{ url: item.image_url, label: '' }] : []);
+
+  function openGallery(i) {
+    setGalleryStart(i);
+    setViewerOpen(true);
+  }
 
   const headerContent = (
     <View>
       <View style={styles.headerCard}>
-        {displayUrl && (
-          <TouchableOpacity activeOpacity={0.85} onPress={() => setViewerOpen(true)}>
-            <Image source={imageSource(displayUrl)} style={styles.image} resizeMode="cover" />
-          </TouchableOpacity>
+        {galleryImages.length > 0 && (
+          <View style={styles.photoStrip}>
+            {galleryImages.map((g, i) => (
+              <TouchableOpacity key={i} activeOpacity={0.85} onPress={() => openGallery(i)} style={styles.photoCardWrap}>
+                <Image source={imageSource(g.url)} style={styles.photoCard} resizeMode="cover" />
+                {g.label ? <Text style={styles.photoCardLabel}>{g.label}</Text> : null}
+              </TouchableOpacity>
+            ))}
+          </View>
         )}
         <View style={styles.meta}>
           <Text style={styles.title}>{item.title}</Text>
@@ -161,10 +178,10 @@ export default function MemoryDetail() {
       <View style={styles.photoCtaRow}>
         <TouchableOpacity onPress={pickAndUpload} disabled={photoBusy} style={styles.photoCtaBtn}>
           <Text style={styles.photoCtaText}>
-            {photoBusy ? 'Working…' : (hasOwnPhoto ? '📷 Change your photo' : '📷 Add your own photo')}
+            {photoBusy ? 'Working…' : (youHavePhoto ? '📷 Change your photo' : '📷 Add your own photo')}
           </Text>
         </TouchableOpacity>
-        {hasOwnPhoto && !photoBusy && (
+        {youHavePhoto && !photoBusy && (
           <TouchableOpacity onPress={removePhoto} style={styles.photoRemoveBtn}>
             <Text style={styles.photoRemoveText}>Remove</Text>
           </TouchableOpacity>
@@ -257,7 +274,7 @@ export default function MemoryDetail() {
         <CommentThread parentType="memory" parentId={item.id} meId={meId} header={headerContent} />
       </View>
 
-      {displayUrl && (
+      {galleryImages.length > 0 && (
         <Modal
           visible={viewerOpen}
           transparent
@@ -265,9 +282,23 @@ export default function MemoryDetail() {
           statusBarTranslucent
           onRequestClose={() => setViewerOpen(false)}
         >
-          <TouchableOpacity style={styles.viewerBackdrop} activeOpacity={1} onPress={() => setViewerOpen(false)}>
-            <Image source={imageSource(displayUrl)} style={styles.viewerImage} resizeMode="contain" />
-          </TouchableOpacity>
+          <View style={styles.viewerBackdrop}>
+            <FlatList
+              data={galleryImages}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              initialScrollIndex={Math.min(galleryStart, galleryImages.length - 1)}
+              getItemLayout={(_, i) => ({ length: SCREEN_W, offset: SCREEN_W * i, index: i })}
+              keyExtractor={(_, i) => String(i)}
+              renderItem={({ item: g }) => (
+                <TouchableOpacity activeOpacity={1} style={styles.viewerPage} onPress={() => setViewerOpen(false)}>
+                  <Image source={imageSource(g.url)} style={styles.viewerImage} resizeMode="contain" />
+                  {g.label ? <Text style={styles.viewerLabel}>{g.label}</Text> : null}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
           <TouchableOpacity
             style={styles.viewerClose}
             onPress={() => setViewerOpen(false)}
@@ -292,9 +323,17 @@ const styles = StyleSheet.create({
   },
   back: { color: colors.accent, fontSize: 15, fontWeight: '500' },
   headerTitle: { flex: 2, fontSize: 18, color: colors.text, fontWeight: '300', textAlign: 'center' },
-  headerCard: { flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 12 },
-  image: { width: 80, height: 80, borderRadius: 12, backgroundColor: colors.warm, marginRight: 14 },
-  meta: { flex: 1, justifyContent: 'center' },
+  headerCard: { paddingHorizontal: 20, paddingBottom: 12 },
+  photoStrip: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  photoCardWrap: { flex: 1 },
+  photoCard: { width: '100%', height: 190, borderRadius: 14, backgroundColor: colors.warm },
+  photoCardLabel: {
+    position: 'absolute', left: 8, bottom: 8,
+    color: '#fff', fontSize: 12, fontWeight: '600',
+    backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10,
+    overflow: 'hidden',
+  },
+  meta: { justifyContent: 'center' },
   title: { fontSize: 22, color: colors.text, fontWeight: '500', marginBottom: 6 },
   tagline: { fontSize: 14, color: colors.textLight, marginBottom: 10 },
   editorCard: {
@@ -386,8 +425,10 @@ const styles = StyleSheet.create({
   photoCtaText: { color: colors.accent, fontSize: 14, fontWeight: '500' },
   photoRemoveBtn: { paddingVertical: 10, paddingHorizontal: 14 },
   photoRemoveText: { color: colors.textMuted, fontSize: 13 },
-  viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)', alignItems: 'center', justifyContent: 'center' },
-  viewerImage: { width: '100%', height: '82%' },
+  viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)' },
+  viewerPage: { width: SCREEN_W, height: '100%', alignItems: 'center', justifyContent: 'center' },
+  viewerImage: { width: SCREEN_W, height: '82%' },
+  viewerLabel: { position: 'absolute', bottom: 70, color: '#fff', fontSize: 14, fontWeight: '500', opacity: 0.85 },
   viewerClose: { position: 'absolute', top: 60, right: 24 },
   viewerCloseText: { color: '#fff', fontSize: 30, fontWeight: '300' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
