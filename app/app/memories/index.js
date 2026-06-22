@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import { useState, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, SectionList, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, API_URL } from '../../lib/api';
@@ -27,6 +27,29 @@ export default function Memories() {
       setRefreshing(false);
     }
   }
+
+  // Group memories into month sections. The API already returns them
+  // completed_at DESC, so months come newest-first and each month's cards
+  // stay newest-first — keeps a long history readable instead of one endless
+  // flat list. Year is shown only for past years.
+  const sections = useMemo(() => {
+    const now = new Date();
+    const groups = [];
+    const byKey = {};
+    for (const m of memories) {
+      const d = new Date(m.completed_at);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      if (!(key in byKey)) {
+        byKey[key] = groups.length;
+        const title = d.getFullYear() === now.getFullYear()
+          ? d.toLocaleDateString('en-US', { month: 'long' })
+          : d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        groups.push({ title, data: [] });
+      }
+      groups[byKey[key]].data.push(m);
+    }
+    return groups;
+  }, [memories]);
 
   function formatDate(dateStr) {
     const d = new Date(dateStr);
@@ -88,11 +111,17 @@ export default function Memories() {
           <Text style={styles.emptySubtext}>Complete an activity together to save it here</Text>
         </View>
       ) : (
-        <FlatList
-          data={memories}
+        <SectionList
+          sections={sections}
           renderItem={renderItem}
+          renderSectionHeader={({ section }) => (
+            // Only label months once the history actually spans more than one —
+            // a single-month list stays a plain list, no header noise.
+            sections.length > 1 ? <Text style={styles.sectionHeader}>{section.title}</Text> : null
+          )}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={{ padding: 20 }}
+          stickySectionHeadersEnabled={false}
           refreshing={refreshing}
           onRefresh={load}
         />
@@ -129,6 +158,15 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   itemNew: { borderColor: colors.accent },
+  sectionHeader: {
+    fontSize: 13,
+    color: colors.textMuted,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: 8,
+    marginBottom: 10,
+  },
   topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
   topText: { flex: 1 },
   thumb: { width: 96, height: 110, borderRadius: 12, backgroundColor: colors.bg },
