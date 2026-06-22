@@ -66,7 +66,6 @@ export default function Swipe() {
   const introHandledRef = useRef(false);
   const bootedRef = useRef(false);
   const [done, setDone] = useState(false);
-  const [backendVersion, setBackendVersion] = useState('');
   const [unread, setUnread] = useState(0);
   const [unreadMem, setUnreadMem] = useState(0);
   const [partnerName, setPartnerName] = useState('');
@@ -116,10 +115,6 @@ export default function Swipe() {
       if (a.image_url) Image.prefetch(resolveImage(a.image_url));
     });
   }
-
-  useEffect(() => {
-    api.health().then(d => setBackendVersion(d.version || '?')).catch(() => {});
-  }, []);
 
   useFocusEffect(useCallback(() => {
     bootedRef.current = false;
@@ -442,7 +437,7 @@ export default function Swipe() {
         onPress={() => router.push('/settings')}
       >
         <Animated.View style={[styles.navPill, { transform: [{ scale: titleScale }] }]}>
-          <Text style={styles.navTitle}>Warmth{backendVersion ? ` · ${backendVersion}` : ''}</Text>
+          <Text style={styles.navTitle}>Warmth</Text>
           <Text style={styles.navTitleCaret}>⌄</Text>
         </Animated.View>
       </TouchableOpacity>
