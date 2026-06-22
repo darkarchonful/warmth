@@ -1408,29 +1408,30 @@ app.get('/memories', auth, async (req, res) => {
      ORDER BY m.completed_at DESC`,
     [cid]
   );
-  // Each partner can add their own photo; collect both per memory (one row per
-  // uploader, PK memory_id+uploaded_by). Each served at /photo/:uid.
+  // Each partner can add a few photos (cap enforced on upload); collect all
+  // per memory. Each served by its own id at /photo/:pid.
   const photoRows = await pool.query(
-    `SELECT mp.memory_id, mp.uploaded_by, mp.updated_at
+    `SELECT mp.id, mp.memory_id, mp.uploaded_by, mp.updated_at
        FROM memory_photos mp
        JOIN memories m ON m.id = mp.memory_id
       WHERE m.couple_id = $1
-      ORDER BY mp.updated_at`,
+      ORDER BY mp.id`,
     [cid]
   );
   const photosByMemory = {};
   for (const p of photoRows.rows) {
     (photosByMemory[p.memory_id] ||= []).push({
+      id: p.id,
       user_id: p.uploaded_by,
       mine: p.uploaded_by === req.user.id,
-      url: `/memories/${p.memory_id}/photo/${p.uploaded_by}?v=${new Date(p.updated_at).getTime()}`,
+      url: `/memories/${p.memory_id}/photo/${p.id}?v=${new Date(p.updated_at).getTime()}`,
     });
   }
   const seen = await pool.query('SELECT last_memories_viewed_at FROM users WHERE id = $1', [req.user.id]);
   const seenAt = seen.rows[0].last_memories_viewed_at;
 
   const payload = memories.rows.map(r => {
-    // Your own photo first, partner's second.
+    // Your own photos first, partner's after, each in add order.
     const photos = (photosByMemory[r.id] || []).slice().sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0));
     return {
     id: r.id, couple_id: r.couple_id, checklist_id: r.checklist_id,
@@ -1500,14 +1501,15 @@ app.patch('/memories/:id', auth, async (req, res) => {
   res.json(result.rows[0]);
 });
 
-// --- Memory photos: one per partner (migrations 035 + 036) ---
-// Each user adds (and owns) their own photo; both are visible to both, but
-// neither can change or remove the other's. Raw image body; the phone
-// resizes/compresses before upload. express.json() (global) ignores image/*
-// content-types, so this route-level parser owns the body.
+// --- Memory photos: each partner adds up to PHOTOS_PER_USER (migrations 035-037) ---
+// Each user owns their own photos; all are visible to both, but neither can
+// delete the other's. Raw image body; the phone resizes/compresses before
+// upload. express.json() (global) ignores image/* content-types, so this
+// route-level parser owns the body.
 const photoUpload = express.raw({ type: ['image/jpeg', 'image/png'], limit: '8mb' });
+const PHOTOS_PER_USER = 2;
 
-// Upload or replace the CALLER'S OWN photo for a memory (keyed by uploader).
+// Add one of the caller's own photos to a memory (each gets its own id).
 app.post('/memories/:id/photo', auth, photoUpload, async (req, res) => {
   const couple = await pool.query(
     'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
@@ -1522,17 +1524,21 @@ app.post('/memories/:id/photo', auth, photoUpload, async (req, res) => {
   if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
     return res.status(400).json({ error: 'No image data' });
   }
+  const mine = await pool.query(
+    'SELECT COUNT(*)::int AS n FROM memory_photos WHERE memory_id = $1 AND uploaded_by = $2',
+    [req.params.id, req.user.id]
+  );
+  if (mine.rows[0].n >= PHOTOS_PER_USER) {
+    return res.status(400).json({ error: `You can add up to ${PHOTOS_PER_USER} photos here` });
+  }
   const ct = req.headers['content-type'];
   const mime = ct && ct.startsWith('image/') ? ct : 'image/jpeg';
   const width = parseInt(req.headers['x-image-width']) || null;
   const height = parseInt(req.headers['x-image-height']) || null;
 
-  await pool.query(
+  const ins = await pool.query(
     `INSERT INTO memory_photos (memory_id, data, mime, width, height, uploaded_by, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NOW())
-     ON CONFLICT (memory_id, uploaded_by) DO UPDATE
-       SET data = EXCLUDED.data, mime = EXCLUDED.mime, width = EXCLUDED.width,
-           height = EXCLUDED.height, updated_at = NOW()`,
+     VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING id`,
     [req.params.id, req.body, mime, width, height, req.user.id]
   );
   // Bump the memory so the partner sees it as new / re-sorted.
@@ -1541,11 +1547,11 @@ app.post('/memories/:id/photo', auth, photoUpload, async (req, res) => {
     [req.params.id]
   );
   const v = new Date(bumped.rows[0].updated_at).getTime();
-  res.json({ ok: true, photo_url: `/memories/${req.params.id}/photo/${req.user.id}?v=${v}` });
+  res.json({ ok: true, photo_url: `/memories/${req.params.id}/photo/${ins.rows[0].id}?v=${v}` });
 });
 
-// Stream a specific partner's photo. Couple-scoped so photos never leak.
-app.get('/memories/:id/photo/:uid', auth, async (req, res) => {
+// Stream a single photo by id. Couple-scoped so photos never leak.
+app.get('/memories/:id/photo/:pid', auth, async (req, res) => {
   const couple = await pool.query(
     'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
     [req.user.id]
@@ -1554,39 +1560,18 @@ app.get('/memories/:id/photo/:uid', auth, async (req, res) => {
   const row = await pool.query(
     `SELECT mp.data, mp.mime FROM memory_photos mp
      JOIN memories m ON m.id = mp.memory_id
-     WHERE mp.memory_id = $1 AND mp.uploaded_by = $2 AND m.couple_id = $3`,
-    [req.params.id, req.params.uid, couple.rows[0].id]
+     WHERE mp.id = $1 AND mp.memory_id = $2 AND m.couple_id = $3`,
+    [req.params.pid, req.params.id, couple.rows[0].id]
   );
   if (row.rows.length === 0) return res.status(404).end();
-  // Each upload gets a fresh ?v= URL, so a given URL is genuinely immutable.
+  // Each photo id + ?v= is genuinely immutable.
   res.set('Content-Type', row.rows[0].mime);
   res.set('Cache-Control', 'private, max-age=31536000, immutable');
   res.send(row.rows[0].data);
 });
 
-// Back-compat: pre-multi-photo clients hit /photo with no uploader. Serve the
-// most recent photo on the memory (couple-scoped).
-app.get('/memories/:id/photo', auth, async (req, res) => {
-  const couple = await pool.query(
-    'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
-    [req.user.id]
-  );
-  if (couple.rows.length === 0) return res.status(404).end();
-  const row = await pool.query(
-    `SELECT mp.data, mp.mime FROM memory_photos mp
-     JOIN memories m ON m.id = mp.memory_id
-     WHERE mp.memory_id = $1 AND m.couple_id = $2
-     ORDER BY mp.updated_at DESC LIMIT 1`,
-    [req.params.id, couple.rows[0].id]
-  );
-  if (row.rows.length === 0) return res.status(404).end();
-  res.set('Content-Type', row.rows[0].mime);
-  res.set('Cache-Control', 'private, max-age=31536000, immutable');
-  res.send(row.rows[0].data);
-});
-
-// Remove ONLY the caller's own photo. Cannot touch the partner's.
-app.delete('/memories/:id/photo', auth, async (req, res) => {
+// Remove ONE of the caller's OWN photos by id. Cannot touch the partner's.
+app.delete('/memories/:id/photo/:pid', auth, async (req, res) => {
   const couple = await pool.query(
     'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE',
     [req.user.id]
@@ -1594,9 +1579,9 @@ app.delete('/memories/:id/photo', auth, async (req, res) => {
   if (couple.rows.length === 0) return res.status(400).json({ error: 'Not in a couple' });
   await pool.query(
     `DELETE FROM memory_photos mp USING memories m
-     WHERE mp.memory_id = m.id AND mp.memory_id = $1 AND m.couple_id = $2
-       AND mp.uploaded_by = $3`,
-    [req.params.id, couple.rows[0].id, req.user.id]
+     WHERE mp.memory_id = m.id AND mp.id = $1 AND mp.memory_id = $2
+       AND m.couple_id = $3 AND mp.uploaded_by = $4`,
+    [req.params.pid, req.params.id, couple.rows[0].id, req.user.id]
   );
   await pool.query(
     'UPDATE memories SET updated_at = NOW() WHERE id = $1 AND couple_id = $2',

@@ -8,12 +8,9 @@ import { api, imageSource } from '../../lib/api';
 // One photo -> single slightly-tilted card; two -> overlapping pair.
 function PhotoStack({ photos }) {
   const imgs = photos.slice(0, 2);
+  // A single photo reads as a normal, upright thumbnail — only a pair scatters.
   if (imgs.length === 1) {
-    return (
-      <View style={styles.stackWrap}>
-        <Image source={imageSource(imgs[0].url)} style={[styles.stackCard, { transform: [{ rotate: '-4deg' }] }]} />
-      </View>
-    );
+    return <Image source={imageSource(imgs[0].url)} style={styles.thumb} />;
   }
   return (
     <View style={styles.stackWrap}>
