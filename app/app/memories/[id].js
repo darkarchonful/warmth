@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator, Modal, FlatList, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator, Modal, FlatList, ScrollView, Dimensions } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -100,13 +100,13 @@ export default function MemoryDetail() {
     }
   }
 
-  function removePhoto() {
-    Alert.alert('Remove your photo?', 'This goes back to the card artwork.', [
+  function deletePhoto(photoId) {
+    Alert.alert('Remove this photo?', '', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove', style: 'destructive', onPress: async () => {
           setPhotoBusy(true);
-          try { await api.deleteMemoryPhoto(item.id); await reload(); }
+          try { await api.deleteMemoryPhoto(item.id, photoId); await reload(); }
           catch (e) { Alert.alert('Could not remove', e.message); }
           finally { setPhotoBusy(false); }
         },
@@ -143,13 +143,15 @@ export default function MemoryDetail() {
 
   const partner = item.partner_name || 'Partner';
   const hasPartnerReaction = item.partner_rating || item.partner_note;
-  // Each partner's own photo (yours first). Fall back to the activity art when
-  // neither has added one yet.
+  // All photos for this memory (yours first, then partner's). Each person can
+  // add up to 2 of their own; you can delete only yours. Falls back to the
+  // activity art when no one has added a photo yet.
   const photos = item.photos || [];
-  const youHavePhoto = photos.some(p => p.mine);
-  const galleryImages = photos.length
-    ? photos.map(p => ({ url: p.url, label: p.mine ? 'You' : partner }))
-    : (item.image_url ? [{ url: item.image_url, label: '' }] : []);
+  const youCount = photos.filter(p => p.mine).length;
+  const canAdd = youCount < 2;
+  const cards = photos.length
+    ? photos.map(p => ({ id: p.id, url: p.url, label: p.mine ? 'You' : partner, mine: p.mine }))
+    : (item.image_url ? [{ id: null, url: item.image_url, label: '', mine: false }] : []);
 
   function openGallery(i) {
     setGalleryStart(i);
@@ -159,15 +161,22 @@ export default function MemoryDetail() {
   const headerContent = (
     <View>
       <View style={styles.headerCard}>
-        {galleryImages.length > 0 && (
-          <View style={styles.photoStrip}>
-            {galleryImages.map((g, i) => (
-              <TouchableOpacity key={i} activeOpacity={0.85} onPress={() => openGallery(i)} style={styles.photoCardWrap}>
-                <Image source={imageSource(g.url)} style={styles.photoCard} resizeMode="cover" />
-                {g.label ? <Text style={styles.photoCardLabel}>{g.label}</Text> : null}
-              </TouchableOpacity>
+        {cards.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoStrip}>
+            {cards.map((c, i) => (
+              <View key={c.id != null ? `p${c.id}` : `art${i}`} style={styles.photoCardWrap}>
+                <TouchableOpacity activeOpacity={0.85} onPress={() => openGallery(i)}>
+                  <Image source={imageSource(c.url)} style={styles.photoCard} resizeMode="cover" />
+                  {c.label ? <Text style={styles.photoCardLabel}>{c.label}</Text> : null}
+                </TouchableOpacity>
+                {c.mine && c.id != null && !photoBusy && (
+                  <TouchableOpacity style={styles.photoDelBtn} onPress={() => deletePhoto(c.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.photoDelText}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             ))}
-          </View>
+          </ScrollView>
         )}
         <View style={styles.meta}>
           <Text style={styles.title}>{item.title}</Text>
@@ -176,15 +185,12 @@ export default function MemoryDetail() {
       </View>
 
       <View style={styles.photoCtaRow}>
-        <TouchableOpacity onPress={pickAndUpload} disabled={photoBusy} style={styles.photoCtaBtn}>
-          <Text style={styles.photoCtaText}>
-            {photoBusy ? 'Working…' : (youHavePhoto ? '📷 Change your photo' : '📷 Add your own photo')}
-          </Text>
-        </TouchableOpacity>
-        {youHavePhoto && !photoBusy && (
-          <TouchableOpacity onPress={removePhoto} style={styles.photoRemoveBtn}>
-            <Text style={styles.photoRemoveText}>Remove</Text>
+        {canAdd ? (
+          <TouchableOpacity onPress={pickAndUpload} disabled={photoBusy} style={styles.photoCtaBtn}>
+            <Text style={styles.photoCtaText}>{photoBusy ? 'Working…' : '📷 Add a photo'}</Text>
           </TouchableOpacity>
+        ) : (
+          <Text style={styles.photoCtaMax}>You've added your 2 photos</Text>
         )}
       </View>
 
@@ -274,7 +280,7 @@ export default function MemoryDetail() {
         <CommentThread parentType="memory" parentId={item.id} meId={meId} header={headerContent} />
       </View>
 
-      {galleryImages.length > 0 && (
+      {cards.length > 0 && (
         <Modal
           visible={viewerOpen}
           transparent
@@ -284,11 +290,11 @@ export default function MemoryDetail() {
         >
           <View style={styles.viewerBackdrop}>
             <FlatList
-              data={galleryImages}
+              data={cards}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              initialScrollIndex={Math.min(galleryStart, galleryImages.length - 1)}
+              initialScrollIndex={Math.min(galleryStart, cards.length - 1)}
               getItemLayout={(_, i) => ({ length: SCREEN_W, offset: SCREEN_W * i, index: i })}
               keyExtractor={(_, i) => String(i)}
               renderItem={({ item: g }) => (
@@ -324,15 +330,22 @@ const styles = StyleSheet.create({
   back: { color: colors.accent, fontSize: 15, fontWeight: '500' },
   headerTitle: { flex: 2, fontSize: 18, color: colors.text, fontWeight: '300', textAlign: 'center' },
   headerCard: { paddingHorizontal: 20, paddingBottom: 12 },
-  photoStrip: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  photoCardWrap: { flex: 1 },
-  photoCard: { width: '100%', height: 190, borderRadius: 14, backgroundColor: colors.warm },
+  photoStrip: { flexDirection: 'row', gap: 10, marginBottom: 12, paddingRight: 20 },
+  photoCardWrap: { width: 150 },
+  photoCard: { width: 150, height: 190, borderRadius: 14, backgroundColor: colors.warm },
   photoCardLabel: {
     position: 'absolute', left: 8, bottom: 8,
     color: '#fff', fontSize: 12, fontWeight: '600',
     backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10,
     overflow: 'hidden',
   },
+  photoDelBtn: {
+    position: 'absolute', top: 6, right: 6,
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center',
+  },
+  photoDelText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  photoCtaMax: { color: colors.textMuted, fontSize: 13, paddingVertical: 10 },
   meta: { justifyContent: 'center' },
   title: { fontSize: 22, color: colors.text, fontWeight: '500', marginBottom: 6 },
   tagline: { fontSize: 14, color: colors.textLight, marginBottom: 10 },
@@ -423,8 +436,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   photoCtaText: { color: colors.accent, fontSize: 14, fontWeight: '500' },
-  photoRemoveBtn: { paddingVertical: 10, paddingHorizontal: 14 },
-  photoRemoveText: { color: colors.textMuted, fontSize: 13 },
   viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)' },
   viewerPage: { width: SCREEN_W, height: '100%', alignItems: 'center', justifyContent: 'center' },
   viewerImage: { width: SCREEN_W, height: '82%' },
