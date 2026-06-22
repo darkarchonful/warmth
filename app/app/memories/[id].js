@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator, Modal, FlatList, ScrollView, Dimensions, Animated } from 'react-native';
+import { PinchGestureHandler, PanGestureHandler, TapGestureHandler, GestureHandlerRootView, State } from 'react-native-gesture-handler';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -27,6 +28,44 @@ function AnimatedStar({ filled, onPress }) {
         {filled ? '★' : '☆'}
       </Animated.Text>
     </TouchableOpacity>
+  );
+}
+
+// A full-screen gallery image you can pinch to zoom (two-finger pan to move
+// while pinched), springing back on release — same RN-Animated +
+// gesture-handler pattern the deck card uses. Two-finger gestures so the
+// gallery's one-finger horizontal paging still swipes between photos.
+function ZoomableImage({ source }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const tx = useRef(new Animated.Value(0)).current;
+  const ty = useRef(new Animated.Value(0)).current;
+  const pinchRef = useRef();
+  const panRef = useRef();
+  const onPinch = Animated.event([{ nativeEvent: { scale } }], { useNativeDriver: true });
+  const onPan = Animated.event(
+    [{ nativeEvent: { translationX: tx, translationY: ty } }],
+    { useNativeDriver: true }
+  );
+  const reset = () => {
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 5 }),
+      Animated.spring(tx, { toValue: 0, useNativeDriver: true, friction: 5 }),
+      Animated.spring(ty, { toValue: 0, useNativeDriver: true, friction: 5 }),
+    ]).start();
+  };
+  const onState = (e) => { if (e.nativeEvent.oldState === State.ACTIVE) reset(); };
+  return (
+    <PinchGestureHandler ref={pinchRef} simultaneousHandlers={panRef} onGestureEvent={onPinch} onHandlerStateChange={onState}>
+      <Animated.View style={styles.viewerImage}>
+        <PanGestureHandler ref={panRef} simultaneousHandlers={pinchRef} minPointers={2} onGestureEvent={onPan} onHandlerStateChange={onState}>
+          <Animated.Image
+            source={source}
+            resizeMode="contain"
+            style={[StyleSheet.absoluteFill, { transform: [{ translateX: tx }, { translateY: ty }, { scale }] }]}
+          />
+        </PanGestureHandler>
+      </Animated.View>
+    </PinchGestureHandler>
   );
 }
 
@@ -311,7 +350,9 @@ export default function MemoryDetail() {
           statusBarTranslucent
           onRequestClose={() => setViewerOpen(false)}
         >
-          <View style={styles.viewerBackdrop}>
+          {/* Modals render outside the app's root GestureHandlerRootView, so
+              the pinch/pan/tap handlers need their own root here. */}
+          <GestureHandlerRootView style={styles.viewerBackdrop}>
             <FlatList
               data={cards}
               horizontal
@@ -321,20 +362,22 @@ export default function MemoryDetail() {
               getItemLayout={(_, i) => ({ length: SCREEN_W, offset: SCREEN_W * i, index: i })}
               keyExtractor={(_, i) => String(i)}
               renderItem={({ item: g }) => (
-                <TouchableOpacity activeOpacity={1} style={styles.viewerPage} onPress={() => setViewerOpen(false)}>
-                  <Image source={imageSource(g.url)} style={styles.viewerImage} resizeMode="contain" />
-                  {g.label ? <Text style={styles.viewerLabel}>{g.label}</Text> : null}
-                </TouchableOpacity>
+                <TapGestureHandler onActivated={() => setViewerOpen(false)}>
+                  <View style={styles.viewerPage}>
+                    <ZoomableImage source={imageSource(g.url)} />
+                    {g.label ? <Text style={styles.viewerLabel}>{g.label}</Text> : null}
+                  </View>
+                </TapGestureHandler>
               )}
             />
-          </View>
-          <TouchableOpacity
-            style={styles.viewerClose}
-            onPress={() => setViewerOpen(false)}
-            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-          >
-            <Text style={styles.viewerCloseText}>✕</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.viewerClose}
+              onPress={() => setViewerOpen(false)}
+              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            >
+              <Text style={styles.viewerCloseText}>✕</Text>
+            </TouchableOpacity>
+          </GestureHandlerRootView>
         </Modal>
       )}
     </View>
