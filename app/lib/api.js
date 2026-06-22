@@ -52,6 +52,12 @@ export async function clearToken() {
 
 async function request(path, options = {}) {
   const headers = { 'Content-Type': 'application/json' };
+  // Capture whether THIS request actually carried a token. The guard below
+  // must use this, not the live `token`: during launch a request can be sent
+  // unauthenticated (before loadToken() resolves) and 401, but by the time the
+  // 401 comes back `token` may have just been set — firing onUnauthorized then
+  // would log out a perfectly valid session (the notification-tap logout bug).
+  const sentWithToken = !!token;
   if (token) headers['Authorization'] = `Bearer ${token}`;
   // Report the device timezone so the server can fire scheduled notifications
   // in the user's local time. Persisted server-side only on /me; harmless
@@ -71,12 +77,12 @@ async function request(path, options = {}) {
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { error: `HTTP ${res.status}` }; }
   if (!res.ok) {
-    // A 401 on a request that carried a token means the session is dead. Fire
+    // A 401 on a request that CARRIED a token means the session is dead. Fire
     // the global handler (clear token + go to login) BEFORE throwing, so even
     // callers that swallow the error — e.g. the deck's 5s /me poll — still get
-    // logged out. Guarded on `token` so failed login attempts (no token yet)
-    // don't trigger it, and so it only fires once (clearToken nulls the token).
-    if (res.status === 401 && token && onUnauthorized) {
+    // logged out. Guarded on `sentWithToken` (request-time) so unauthenticated
+    // launch-race requests and failed login attempts don't nuke a live session.
+    if (res.status === 401 && sentWithToken && onUnauthorized) {
       onUnauthorized();
     }
     // Attach the HTTP status so callers can distinguish a genuine 401 (token
