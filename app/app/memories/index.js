@@ -4,6 +4,25 @@ import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, imageSource } from '../../lib/api';
 
+// Each partner's own photo, shown as a small tilted stack (Time-to-act style).
+// One photo -> single slightly-tilted card; two -> overlapping pair.
+function PhotoStack({ photos }) {
+  const imgs = photos.slice(0, 2);
+  if (imgs.length === 1) {
+    return (
+      <View style={styles.stackWrap}>
+        <Image source={imageSource(imgs[0].url)} style={[styles.stackCard, { transform: [{ rotate: '-4deg' }] }]} />
+      </View>
+    );
+  }
+  return (
+    <View style={styles.stackWrap}>
+      <Image source={imageSource(imgs[0].url)} style={[styles.stackCard, { transform: [{ rotate: '-9deg' }, { translateX: -9 }] }]} />
+      <Image source={imageSource(imgs[1].url)} style={[styles.stackCard, { transform: [{ rotate: '8deg' }, { translateX: 9 }] }]} />
+    </View>
+  );
+}
+
 export default function Memories() {
   const router = useRouter();
   const [memories, setMemories] = useState([]);
@@ -66,8 +85,10 @@ export default function Memories() {
         style={[styles.item, (item.is_new || item.repeat_requested_by_partner) && styles.itemNew]}
       >
         <View style={styles.topRow}>
-          {(item.photo_url || item.image_url) ? (
-            <Image source={imageSource(item.photo_url || item.image_url)} style={styles.thumb} />
+          {item.photos && item.photos.length > 0 ? (
+            <PhotoStack photos={item.photos} />
+          ) : item.image_url ? (
+            <Image source={imageSource(item.image_url)} style={styles.thumb} />
           ) : (
             <View style={[styles.thumb, styles.thumbPlaceholder]} />
           )}
@@ -166,6 +187,13 @@ const styles = StyleSheet.create({
   topText: { flex: 1 },
   thumb: { width: 96, height: 110, borderRadius: 12, backgroundColor: colors.bg },
   thumbPlaceholder: { borderWidth: 1, borderColor: colors.line || '#eee' },
+  stackWrap: { width: 96, height: 110, alignItems: 'center', justifyContent: 'center' },
+  stackCard: {
+    position: 'absolute',
+    width: 62, height: 80, borderRadius: 10,
+    borderWidth: 2, borderColor: '#fff', backgroundColor: colors.bg,
+    shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 3,
+  },
   repeatFlag: { marginTop: 10, fontSize: 13, color: colors.accent, fontWeight: '500' },
   repeatPending: { marginTop: 10, fontSize: 13, color: colors.textMuted, fontStyle: 'italic' },
   date: { fontSize: 12, color: colors.accent, marginBottom: 6 },
