@@ -72,6 +72,10 @@ export default function CommentThread({ parentType, parentId, meId, header }) {
         contentContainerStyle={{ padding: 20, paddingBottom: 10 }}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={header || null}
+        // The header carries live state (rating stars, note, photos). It's a
+        // fresh element each parent render, but FlatList won't re-render the
+        // header on that alone — extraData forces it so taps reflect at once.
+        extraData={header}
         ListEmptyComponent={<Text style={styles.empty}>No messages yet — say something.</Text>}
         renderItem={({ item }) => {
           const mine = item.user_id === meId;

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator, Modal, FlatList, ScrollView, Dimensions } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator, Modal, FlatList, ScrollView, Dimensions, Animated } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -8,6 +8,27 @@ import { api, imageSource } from '../../lib/api';
 import CommentThread from '../../components/CommentThread';
 
 const SCREEN_W = Dimensions.get('window').width;
+
+// A rating star that pops on tap — instant tactile feedback, independent of
+// the state round-trip that fills it in.
+function AnimatedStar({ filled, onPress }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  function handle() {
+    scale.setValue(1);
+    Animated.sequence([
+      Animated.spring(scale, { toValue: 1.45, useNativeDriver: true, speed: 50, bounciness: 16 }),
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 12 }),
+    ]).start();
+    onPress();
+  }
+  return (
+    <TouchableOpacity onPress={handle} activeOpacity={0.7}>
+      <Animated.Text style={[styles.star, { transform: [{ scale }] }]}>
+        {filled ? '★' : '☆'}
+      </Animated.Text>
+    </TouchableOpacity>
+  );
+}
 
 export default function MemoryDetail() {
   const router = useRouter();
@@ -236,9 +257,11 @@ export default function MemoryDetail() {
         <Text style={styles.sectionLabel}>Your rating</Text>
         <View style={styles.starsRow}>
           {[1, 2, 3, 4, 5].map(n => (
-            <TouchableOpacity key={n} onPress={() => saveField({ rating: item.you_rating === n ? null : n })}>
-              <Text style={styles.star}>{(item.you_rating || 0) >= n ? '★' : '☆'}</Text>
-            </TouchableOpacity>
+            <AnimatedStar
+              key={n}
+              filled={(item.you_rating || 0) >= n}
+              onPress={() => saveField({ rating: item.you_rating === n ? null : n })}
+            />
           ))}
         </View>
 
