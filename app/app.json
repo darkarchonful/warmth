@@ -48,7 +48,14 @@
       "expo-router",
       "expo-web-browser",
       "expo-notifications",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Warmth uses your photos so you can add your own picture to a memory.",
+          "cameraPermission": false
+        }
+      ]
     ]
   }
 }
