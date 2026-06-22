@@ -210,6 +210,7 @@ export default function Memories() {
           renderItem={renderRow}
           onDragEnd={onDragEnd}
           activationDistance={12}
+          containerStyle={{ flex: 1 }}
           extraData={visibleIds}
           onViewableItemsChanged={onViewRef.current}
           viewabilityConfig={viewConfigRef.current}
