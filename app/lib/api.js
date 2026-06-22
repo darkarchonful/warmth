@@ -197,7 +197,7 @@ export const api = {
     body: JSON.stringify({ liked }),
   }),
   uploadMemoryPhoto: (id, fileUri, width, height) => uploadMemoryPhoto(id, fileUri, width, height),
-  deleteMemoryPhoto: (id) => request(`/memories/${id}/photo`, { method: 'DELETE' }),
+  deleteMemoryPhoto: (memoryId, photoId) => request(`/memories/${memoryId}/photo/${photoId}`, { method: 'DELETE' }),
 
   // Comments
   getComments: (parentType, id) => request(`/comments/${parentType}/${id}`),
