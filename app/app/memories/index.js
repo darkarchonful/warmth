@@ -213,7 +213,7 @@ export default function Memories() {
           extraData={visibleIds}
           onViewableItemsChanged={onViewRef.current}
           viewabilityConfig={viewConfigRef.current}
-          contentContainerStyle={{ padding: 20 }}
+          contentContainerStyle={{ padding: 20, paddingBottom: 64 }}
           ListHeaderComponent={<Text style={styles.dragHint}>Hold a memory to reorder it</Text>}
           refreshing={refreshing}
           onRefresh={load}
