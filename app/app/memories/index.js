@@ -215,7 +215,6 @@ export default function Memories() {
           onViewableItemsChanged={onViewRef.current}
           viewabilityConfig={viewConfigRef.current}
           contentContainerStyle={{ padding: 20, paddingBottom: 64 }}
-          ListHeaderComponent={<Text style={styles.dragHint}>Hold a memory to reorder it</Text>}
           refreshing={refreshing}
           onRefresh={load}
         />
@@ -253,7 +252,6 @@ const styles = StyleSheet.create({
   },
   itemNew: { borderColor: colors.accent },
   itemDragging: { shadowOpacity: 0.18, shadowRadius: 16, elevation: 8, borderColor: colors.accent },
-  dragHint: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', textAlign: 'center', marginBottom: 12 },
   sectionHeader: {
     fontSize: 13,
     color: colors.textMuted,
