@@ -10,8 +10,18 @@ const { sendPush } = require('./push');
 
 const app = express();
 app.use(cors());
+// With a CDN (Bunny) in front, default every response to no-store so dynamic,
+// per-user API data is never cached at the edge or shared between users. The few
+// endpoints that serve genuinely immutable content — activity art (express.static
+// below) and memory photos — set their own Cache-Control and override this.
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 app.use(express.json());
-app.use('/images/activities', express.static(path.join(__dirname, '..', 'public', 'activities')));
+app.use('/images/activities', express.static(path.join(__dirname, '..', 'public', 'activities'), {
+  maxAge: '30d', immutable: true,
+}));
 // Public privacy policy + support pages (App Store requires reachable URLs).
 app.get(['/privacy', '/privacy.html'], (req, res) =>
   res.sendFile(path.join(__dirname, '..', 'public', 'privacy.html')));
