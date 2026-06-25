@@ -15,7 +15,10 @@ app.use(cors());
 // endpoints that serve genuinely immutable content — activity art (express.static
 // below) and memory photos — set their own Cache-Control and override this.
 app.use((req, res, next) => {
-  res.set('Cache-Control', 'no-store');
+  // Static immutable assets (activity art under /images/) set their own long
+  // cache below. serve-static only sets Cache-Control if one isn't already set,
+  // so DON'T pre-set no-store on those paths or the art becomes uncacheable.
+  if (!req.path.startsWith('/images/')) res.set('Cache-Control', 'no-store');
   next();
 });
 app.use(express.json());
