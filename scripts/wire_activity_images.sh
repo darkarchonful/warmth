@@ -5,7 +5,7 @@
 #
 # Workflow: generate art (see docs/CARD_IMAGE_PROMPTS.md) -> name <id>.jpg ->
 # drop in api/public/activities/ -> build+deploy API -> run this script.
-cd "$(dirname "$0")/.." || exit 1
+cd "$(dirname "$(readlink -f "$0")")/.." || exit 1   # repo root, robust to cwd
 
 DIR=api/public/activities
 ids=$(ls "$DIR"/*.jpg 2>/dev/null | sed 's#.*/##; s/\.jpg$//' | grep -E '^[0-9]+$' | sort -n | paste -sd,)
