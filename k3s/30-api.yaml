@@ -50,13 +50,13 @@ spec:
           - 8.8.8.8
       containers:
         - name: api
-          image: ghcr.io/darkarchonful/warmth-api:v40
+          image: ghcr.io/darkarchonful/warmth-api:v41
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
             - name: APP_VERSION
-              value: "v40"
+              value: "v41"
             - name: APPLE_BUNDLE_ID
               value: "com.dbtvault.warmth"
             # TODO: remove before public launch — testing bypass for daily cap
