@@ -13,7 +13,7 @@ INSERT INTO activities (category_id, title, tagline, seasons, difficulty) VALUES
   ((SELECT id FROM categories WHERE name='Food'),       'Cook their comfort dish',           'The recipe from their childhood',    ARRAY['all'],                      2),
   ((SELECT id FROM categories WHERE name='Chill'),      'Two-hour no-phone walk',            'New streets, no map, no phones',     ARRAY['all'],                      1),
   ((SELECT id FROM categories WHERE name='Creative'),   'Write each other a user manual',    'How to love me when I''m stressed',  ARRAY['all'],                      2),
-  ((SELECT id FROM categories WHERE name='Adventures'), 'Be tourists in your own city',      'Do the touristy thing at home',      ARRAY['all'],                      2),
+  ((SELECT id FROM categories WHERE name='Adventures'), 'Be tourists in your own city',      'Go on an excursion in your own city', ARRAY['all'],                     2),
   ((SELECT id FROM categories WHERE name='Creative'),   'Pottery class for two',             'Make a mess, make a bowl',           ARRAY['all'],                      4),
   ((SELECT id FROM categories WHERE name='Daily'),      'Couple''s bucket-list night',       'Write thirty things to do together', ARRAY['all'],                      1),
   ((SELECT id FROM categories WHERE name='Food'),       'Cook a farmers-market haul',        'Buy it fresh, make it together',     ARRAY['spring','summer','autumn'], 2),
