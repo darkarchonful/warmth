@@ -25,11 +25,13 @@ app.use(express.json());
 app.use('/images/activities', express.static(path.join(__dirname, '..', 'public', 'activities'), {
   maxAge: '30d', immutable: true,
 }));
-// Public privacy policy + support pages (App Store requires reachable URLs).
+// Canonical privacy/support pages live on the website (dbtvault-solutions.tech/warmth/*),
+// decoupled from app infra and editable via the static-site auto-deploy. These API
+// routes 301-redirect there so the App Store URLs + any old links resolve to one source.
 app.get(['/privacy', '/privacy.html'], (req, res) =>
-  res.sendFile(path.join(__dirname, '..', 'public', 'privacy.html')));
+  res.redirect(301, 'https://dbtvault-solutions.tech/warmth/privacy/'));
 app.get(['/support', '/support.html'], (req, res) =>
-  res.sendFile(path.join(__dirname, '..', 'public', 'support.html')));
+  res.redirect(301, 'https://dbtvault-solutions.tech/warmth/support/'));
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
