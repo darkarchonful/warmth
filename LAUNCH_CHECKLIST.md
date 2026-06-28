@@ -20,8 +20,8 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ✅ **Listing copy drafted** — name, subtitle, description, keywords, categories in `docs/APP_STORE_LISTING.md` (still needs entering into ASC)
 - ✅ **Screenshots captured** — 5-shot set (swipe / match / plans / plan+comment / memory) via demo account, apostrophes fixed in seed. Plan in `docs/APP_STORE_SCREENSHOTS.md`. ⬜ still needs uploading to ASC (6.7" slot, order 1→5) once the Armenia app record exists
 - ✅ **App icon 1024×1024** — variant A (interlocking swirl), `app/assets/icon.png`, shipped in build 20
-- ✅ **Privacy Policy URL** — https://warmth-api.dbtvault-solutions.tech/privacy (live)
-- ✅ **Support URL** — https://warmth-api.dbtvault-solutions.tech/support (live, v32) · ⬜ optional marketing URL
+- ✅ **Privacy Policy URL** — https://dbtvault-solutions.tech/warmth/privacy/ (canonical, on the static site; old API /privacy 301-redirects here)
+- ✅ **Support URL** — https://dbtvault-solutions.tech/warmth/support/ (canonical, on the static site; old API /support 301-redirects here) · ⬜ optional marketing URL
 - ✅ **App Privacy "nutrition label"** — paste-ready ASC answers in `docs/APP_PRIVACY_NUTRITION_LABEL.md` (all data Linked / App Functionality / **not** tracking; no location, no ad SDKs). ⬜ still needs entering into ASC
 - ✅ **Age rating questionnaire** — answers in `docs/APP_AGE_RATING.md`, lands at **12+**. ⬜ still needs entering into ASC
 
