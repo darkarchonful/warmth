@@ -43,7 +43,7 @@ spec:
               - 8.8.8.8
           containers:
             - name: scheduler
-              image: ghcr.io/darkarchonful/warmth-api:v35
+              image: ghcr.io/darkarchonful/warmth-api:v45
               imagePullPolicy: IfNotPresent
               command: ["node", "src/scheduler.js"]
               env:
