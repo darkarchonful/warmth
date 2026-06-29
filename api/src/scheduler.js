@@ -3,10 +3,13 @@
 // of the long-running API process — same image, different entrypoint
 // (`node src/scheduler.js`).
 //
-// Two notification families live here:
+// Notification families that live here:
 //   C — time events: fire at a fixed *local* hour (weekend prompt).
 //   B — app events:  fire when a derived condition becomes true (on-a-roll
 //                    milestone, activity asymmetry).
+//   D — plan events: chase a plan that's stalled in its lifecycle — D1 nudges
+//                    an approved-but-not-done plan, D2 nudges a matched plan
+//                    still waiting on a partner's approval.
 //
 // Local time is resolved in Postgres via `now() AT TIME ZONE u.timezone`
 // (Postgres ships the full IANA tz database), so there is no date math here
@@ -253,10 +256,58 @@ async function stalePlanNudge() {
   return { rule: 'D1 stale_plan', candidates: rows.length, posted };
 }
 
+// ---------------------------------------------------------------------------
+// D2 — Matched-but-unapproved nudge. A top-level plan both partners matched on
+// (swiped yes) but that's still waiting on an Approve tap to become a real
+// plan. Nudge ONLY the partner(s) who haven't approved it themselves — the one
+// whose tap unblocks it:
+//   • partner already approved → "they're ready, your turn".
+//   • neither approved yet      → "you matched this, approve to plan it" (both
+//     sides qualify, so both get their own once-per-plan nudge).
+// Top-level only (journey sub-steps skipped), after the plan has sat in
+// 'matched' for 2+ days, at the silent partner's local 18:00. The dedup_key is
+// per-plan with no date, so each partner is reminded exactly once per plan and
+// it never nags. D1 (stale_plan) takes over once both have approved.
+// ---------------------------------------------------------------------------
+async function matchedApproveNudge() {
+  const { rows } = await pool.query(`
+    SELECT u.id AS user_id,
+           partner.name AS partner_name,
+           a.title AS title,
+           cl.id AS plan_id,
+           (CASE WHEN u.id = c.user_a_id THEN cl.approved_by_b ELSE cl.approved_by_a END) AS partner_approved
+    FROM checklist cl
+    JOIN couples c     ON c.id = cl.couple_id AND c.active AND c.user_b_id IS NOT NULL
+    JOIN activities a  ON a.id = cl.activity_id
+    JOIN users u       ON u.id       IN (c.user_a_id, c.user_b_id)
+    JOIN users partner ON partner.id IN (c.user_a_id, c.user_b_id) AND partner.id <> u.id
+    WHERE cl.status = 'matched'
+      AND cl.parent_checklist_id IS NULL
+      AND cl.matched_at < now() - interval '2 days'
+      -- this user hasn't approved their own side yet
+      AND NOT (CASE WHEN u.id = c.user_a_id THEN cl.approved_by_a ELSE cl.approved_by_b END)
+      AND u.timezone IS NOT NULL
+      AND EXISTS (SELECT 1 FROM push_tokens pt WHERE pt.user_id = u.id)
+      AND EXTRACT(HOUR FROM (now() AT TIME ZONE u.timezone)) = 18
+  `);
+  let sent = 0;
+  for (const r of rows) {
+    const who = r.partner_name || 'Your partner';
+    const msg = r.partner_approved
+      ? { title: `${who} is ready 💛`, body: `Approve "${r.title}" so you can plan it together.` }
+      : { title: 'You matched on something 💛', body: `Approve "${r.title}" to turn it into a plan.` };
+    if (await dispatch({
+      userId: r.user_id, type: 'matched_approve', dedupKey: `matched_approve:${r.plan_id}`,
+      title: msg.title, body: msg.body, data: { route: `/checklist/${r.plan_id}` },
+    })) sent++;
+  }
+  return { rule: 'D2 matched_approve', candidates: rows.length, sent };
+}
+
 async function main() {
   const started = new Date().toISOString();
   const results = [];
-  for (const rule of [weekendPrompt, onARoll, asymmetryNudge, stalePlanNudge]) {
+  for (const rule of [weekendPrompt, onARoll, asymmetryNudge, stalePlanNudge, matchedApproveNudge]) {
     try {
       results.push(await rule());
     } catch (e) {
