@@ -213,6 +213,26 @@ function notifyPartnerOnce(partnerId, actorId, type, dedupKey, build, data = {})
     .catch((e) => console.error('[push] notifyPartnerOnce', e.message));
 }
 
+// A user acting on a plan/memory (comment, approve, complete, edit, photo,
+// repeat, nudge...) bumps that row's updated_at so the PARTNER's nav dot +
+// icon badge refresh. But the unread counts compare updated_at > the viewer's
+// own last_{checklist,memories}_viewed_at, so without this the actor's own
+// change would light up their OWN dot/badge until they next open the list.
+// Advance the actor's own high-water mark so self-actions never notify the
+// actor. Coarse (marks all of that kind seen) — identical to the semantics of
+// simply opening the list (GET /memories, GET /checklist). Call AFTER the
+// updated_at bump so now() here is >= the row's new updated_at. `kind` is
+// 'plan' (checklist) or 'memory'. Best-effort: swallow errors so a failure
+// here never breaks the user's action.
+async function markSelfSeen(userId, kind) {
+  const col = kind === 'plan' ? 'last_checklist_viewed_at' : 'last_memories_viewed_at';
+  try {
+    await pool.query(`UPDATE users SET ${col} = now() WHERE id = $1`, [userId]);
+  } catch (e) {
+    console.error('[markSelfSeen]', e.message);
+  }
+}
+
 // Find-or-create a user from a verified social identity, linking accounts by
 // verified email. Order of resolution:
 //   1. A row already owns this provider id  -> use it (refresh name/avatar/email).
@@ -1120,6 +1140,9 @@ app.post('/activities/:id/swipe', auth, async (req, res) => {
           ).catch(e => console.error('[push] match', e.message));
         }
       }).catch(e => console.error('[push] match lookup', e.message));
+      // Acting user sees the match modal, not a plan dot for the plan they
+      // just created by matching — mark it seen for them.
+      await markSelfSeen(req.user.id, 'plan');
       return res.json({ match: true, message: 'You both want this!', first_match: firstMatch });
     }
   }
@@ -1236,6 +1259,7 @@ app.post('/checklist/:id/approve', auth, async (req, res) => {
       .catch(e => console.error('[push] approve', e.message));
   }).catch(e => console.error('[push] approve lookup', e.message));
 
+  await markSelfSeen(req.user.id, 'plan');
   res.json({ approved: true });
 });
 
@@ -1283,6 +1307,7 @@ app.post('/checklist/:id/custom-substep', auth, async (req, res) => {
     [c.id, activityId, p.id]
   );
 
+  await markSelfSeen(req.user.id, 'plan');
   res.json({ ...newRow.rows[0], title, tagline, is_journey: false });
 });
 
@@ -1371,6 +1396,11 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
       .catch(e => console.error('[push] complete', e.message));
   }).catch(e => console.error('[push] complete lookup', e.message));
 
+  // The actor just acted on this plan; if completing it minted a fresh memory
+  // (both done, top-level), mark that seen for them too so the new memory
+  // doesn't light up the actor's own Memories dot.
+  await markSelfSeen(req.user.id, 'plan');
+  if (bothDone && !isSub) await markSelfSeen(req.user.id, 'memory');
   res.json({ completed: true, first_completion: firstCompletion });
 });
 
@@ -1514,6 +1544,7 @@ app.patch('/memories/:id', auth, async (req, res) => {
     );
   }
 
+  await markSelfSeen(req.user.id, 'memory');
   res.json(result.rows[0]);
 });
 
@@ -1563,6 +1594,7 @@ app.post('/memories/:id/photo', auth, photoUpload, async (req, res) => {
     [req.params.id]
   );
   const v = new Date(bumped.rows[0].updated_at).getTime();
+  await markSelfSeen(req.user.id, 'memory');
   res.json({ ok: true, photo_url: `/memories/${req.params.id}/photo/${ins.rows[0].id}?v=${v}` });
 });
 
@@ -1603,6 +1635,7 @@ app.delete('/memories/:id/photo/:pid', auth, async (req, res) => {
     'UPDATE memories SET updated_at = NOW() WHERE id = $1 AND couple_id = $2',
     [req.params.id, couple.rows[0].id]
   );
+  await markSelfSeen(req.user.id, 'memory');
   res.json({ ok: true });
 });
 
@@ -1657,6 +1690,7 @@ app.post('/memories/:id/repeat', auth, async (req, res) => {
         { route: `/memories/${req.params.id}` }
       ).catch(e => console.error('[push] repeat', e.message));
     }).catch(e => console.error('[push] repeat lookup', e.message));
+  await markSelfSeen(req.user.id, 'memory');
   res.json({ ok: true });
 });
 
@@ -1673,6 +1707,7 @@ app.post('/memories/:id/cancel-repeat', auth, async (req, res) => {
      WHERE id = $1 AND couple_id = $2`,
     [req.params.id, couple.rows[0].id]
   );
+  await markSelfSeen(req.user.id, 'memory');
   res.json({ ok: true });
 });
 
@@ -1714,6 +1749,8 @@ app.post('/memories/:id/accept-repeat', auth, async (req, res) => {
       [m.id]
     );
     await client.query('COMMIT');
+    await markSelfSeen(req.user.id, 'memory');
+    await markSelfSeen(req.user.id, 'plan');
     res.json({ ok: true, checklist_id: plan.rows[0].id });
   } catch (e) {
     await client.query('ROLLBACK');
@@ -1760,6 +1797,8 @@ app.post('/memories/:id/nudge-swipe', auth, async (req, res) => {
     `UPDATE memories SET nudge_response_${myCol} = $1, updated_at = NOW() WHERE id = $2`,
     [liked, memoryId]
   );
+  // The actor's own nudge swipe just bumped the memory; don't dot themselves.
+  await markSelfSeen(req.user.id, 'memory');
 
   if (!liked) {
     await pool.query(
@@ -1784,6 +1823,7 @@ app.post('/memories/:id/nudge-swipe', auth, async (req, res) => {
       `${m.activity_title} is back on the list`,
       { route: '/checklist' }
     ).catch(e => console.error('[push] nudge match', e.message));
+    await markSelfSeen(req.user.id, 'plan'); // match minted a fresh plan
     return res.json({ match: true, message: 'Bringing it back!' });
   }
 
@@ -1846,6 +1886,8 @@ app.post('/comments/:parentType/:id', auth, async (req, res) => {
   // Bump parent.updated_at so nav dot + list ordering refresh for partner.
   // Caller marks themselves as having seen their own comment.
   await pool.query(`UPDATE ${table} SET updated_at = now(), ${col} = now() WHERE id = $1`, [id]);
+  // Don't let the author's own comment count as unread against themselves.
+  await markSelfSeen(req.user.id, parentType === 'plan' ? 'plan' : 'memory');
 
   // Notify partner — truncate long comments for the push body.
   const partnerId = parent.user_a_id === req.user.id ? parent.user_b_id : parent.user_a_id;
