@@ -8,6 +8,21 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// Telegram-style delivery ticks: a single check when delivered, an overlapping
+// double-check when the partner has read it (the second ✓ is pulled left so the
+// two overlap like Telegram's, not two spaced-out ✓✓). Telegram's tick blue,
+// which also reads clearly on the warm/tan outgoing bubble.
+const TICK_BLUE = '#40A7E3';
+function Ticks({ read }) {
+  if (!read) return <Text style={[styles.tick, styles.tickSolo]}>✓</Text>;
+  return (
+    <View style={styles.ticksWrap}>
+      <Text style={styles.tick}>✓</Text>
+      <Text style={[styles.tick, styles.tickOverlap]}>✓</Text>
+    </View>
+  );
+}
+
 export default function CommentThread({ parentType, parentId, meId, header }) {
   const insets = useSafeAreaInsets();
   const [comments, setComments] = useState([]);
@@ -85,7 +100,7 @@ export default function CommentThread({ parentType, parentId, meId, header }) {
               {!mine && <Text style={styles.bubbleAuthor}>{item.user_name}</Text>}
               <Text style={styles.bubbleText}>{item.text}</Text>
               {mine && (
-                <Text style={styles.ticks}>{read ? '✓✓' : '✓'}</Text>
+                <Ticks read={read} />
               )}
             </View>
           );
@@ -135,13 +150,22 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 20,
   },
-  ticks: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#15803D',
+  ticksWrap: {
+    flexDirection: 'row',
     alignSelf: 'flex-end',
     marginTop: 2,
-    letterSpacing: -2,
+  },
+  tick: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: TICK_BLUE,
+  },
+  tickSolo: {
+    alignSelf: 'flex-end',
+    marginTop: 2,
+  },
+  tickOverlap: {
+    marginLeft: -6,
   },
   empty: {
     fontSize: 14,
