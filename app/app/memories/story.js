@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, imageSource } from '../../lib/api';
+
+// Inner content width of a page card = screen − scroll padding (20×2) − page
+// padding (22×2). Multi-photo pages show each photo at 82% of that so the next
+// one peeks in, signalling "swipe for more".
+const { width: SCREEN_W } = Dimensions.get('window');
+const CONTENT_W = SCREEN_W - 40 - 44;
 
 // "Story" — the couple's memories composed as a little book: a cover, then one
 // page per memory read oldest -> newest (the list screen is newest-first /
@@ -76,9 +82,20 @@ export default function Story() {
             const partnerHas = m.partner_rating || m.partner_note;
             return (
               <TouchableOpacity key={m.id} activeOpacity={0.92} onPress={() => router.push(`/memories/${m.id}`)} style={styles.page}>
-                {photos.length > 0 && (
+                {photos.length === 1 ? (
                   <Image source={imageSource(photos[0].url)} style={styles.pagePhoto} resizeMode="cover" />
-                )}
+                ) : photos.length > 1 ? (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.strip}
+                    contentContainerStyle={styles.stripContent}
+                  >
+                    {photos.map((p, pi) => (
+                      <Image key={p.id ?? `art-${pi}`} source={imageSource(p.url)} style={styles.stripPhoto} resizeMode="cover" />
+                    ))}
+                  </ScrollView>
+                ) : null}
                 <Text style={styles.pageDate}>{fmt(m.completed_at)}</Text>
                 <Text style={styles.pageTitle}>{m.title}</Text>
                 {m.tagline ? <Text style={styles.pageTagline}>{m.tagline}</Text> : null}
@@ -137,6 +154,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   pagePhoto: { width: '100%', height: 240, borderRadius: 14, backgroundColor: colors.bg, marginBottom: 16 },
+  strip: { marginBottom: 16 },
+  stripContent: { gap: 10, paddingRight: 4 },
+  stripPhoto: { width: CONTENT_W * 0.82, height: 220, borderRadius: 14, backgroundColor: colors.bg },
   pageDate: { fontSize: 12, color: colors.accent, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 6 },
   pageTitle: { fontSize: 24, color: colors.text, fontWeight: '300', marginBottom: 6 },
   pageTagline: { fontSize: 15, color: colors.textLight, fontStyle: 'italic', marginBottom: 4 },
