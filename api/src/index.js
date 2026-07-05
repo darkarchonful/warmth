@@ -1448,6 +1448,7 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
   const isJourney = item.rows[0].is_journey === true;
   const bothDone = item.rows[0].completed_by_a && item.rows[0].completed_by_b;
   let firstCompletion = false;
+  let newMemoryId = null;
   if (bothDone) {
     await pool.query(
       "UPDATE checklist SET status = 'done', completed_at = NOW(), updated_at = NOW() WHERE id = $1",
@@ -1470,15 +1471,17 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
         );
         journeySteps = steps.rows.map(r => r.title);
       }
-      await pool.query(
+      const memIns = await pool.query(
         `INSERT INTO memories (couple_id, checklist_id, activity_id, activity_title, activity_tagline, activity_image_url, activity_category, journey_steps)
          SELECT $1, $2, a.id, a.title, a.tagline, a.image_url, cat.name, $3
          FROM activities a
          JOIN categories cat ON cat.id = a.category_id
          JOIN checklist cl ON cl.activity_id = a.id
-         WHERE cl.id = $2`,
+         WHERE cl.id = $2
+         RETURNING id`,
         [c.id, req.params.id, journeySteps]
       );
+      newMemoryId = memIns.rows[0]?.id ?? null;
     }
   }
   // Notify partner.
@@ -1511,7 +1514,7 @@ app.post('/checklist/:id/complete', auth, async (req, res) => {
   // doesn't light up the actor's own Memories dot.
   await markSelfSeen(req.user.id, 'plan');
   if (bothDone && !isSub) await markSelfSeen(req.user.id, 'memory');
-  res.json({ completed: true, first_completion: firstCompletion });
+  res.json({ completed: true, first_completion: firstCompletion, memory_id: newMemoryId });
 });
 
 // Delete a done checklist item (and its memory). Rejected for items that

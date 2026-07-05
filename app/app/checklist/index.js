@@ -21,6 +21,7 @@ export default function Checklist() {
   const [submitting, setSubmitting] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [coachDone, setCoachDone] = useState(false);
+  const [coachMemoryId, setCoachMemoryId] = useState(null);
 
   useEffect(() => {
     load();
@@ -44,7 +45,10 @@ export default function Checklist() {
   async function handleComplete(id) {
     try {
       const result = await api.complete(id);
-      if (result?.first_completion) setCoachDone(true);
+      if (result?.first_completion) {
+        setCoachMemoryId(result.memory_id ?? null);
+        setCoachDone(true);
+      }
       load();
     } catch (e) {
       if (e.premiumRequired) { setShowPaywall(true); return; }
@@ -246,11 +250,14 @@ export default function Checklist() {
     <View style={styles.container}>
       <CoachCard
         visible={coachDone}
-        emoji="✨"
+        emoji="📸"
         title="Your first memory!"
-        body="Nice — done together. It just moved to Memories, where you can rate it ⭐ and look back anytime."
-        cta="See Memories"
-        onPress={() => { setCoachDone(false); router.push('/memories'); }}
+        body="You did this together 💛 Add a photo so you'll always remember it."
+        cta="Add a photo"
+        onPress={() => {
+          setCoachDone(false);
+          router.push(coachMemoryId ? `/memories/${coachMemoryId}` : '/memories');
+        }}
       />
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.back()}>
