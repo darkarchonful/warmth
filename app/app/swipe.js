@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, PanResponder, Image, Alert, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
-import { PinchGestureHandler, PanGestureHandler, State } from 'react-native-gesture-handler';
+import { PinchGestureHandler, PanGestureHandler, TapGestureHandler, GestureHandlerRootView, State } from 'react-native-gesture-handler';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '../lib/colors';
 import { api, API_URL } from '../lib/api';
@@ -33,8 +33,42 @@ function PulsingDot() {
   return <Animated.View style={[styles.unreadDot, { transform: [{ scale }], opacity }]} />;
 }
 
-const { width: SCREEN_W } = Dimensions.get('window');
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_W * 0.25;
+
+// Full-screen pinch-to-zoom image (two-finger pan to move while pinched),
+// springing back on release. Same RN-Animated + gesture-handler pattern as the
+// memory gallery — used by the deck's tap-to-view-big viewer so activity art
+// zooms over the WHOLE screen instead of being clipped inside the card frame.
+function ZoomableImage({ source }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const tx = useRef(new Animated.Value(0)).current;
+  const ty = useRef(new Animated.Value(0)).current;
+  const pinchRef = useRef();
+  const panRef = useRef();
+  const onPinch = Animated.event([{ nativeEvent: { scale } }], { useNativeDriver: true });
+  const onPan = Animated.event(
+    [{ nativeEvent: { translationX: tx, translationY: ty } }],
+    { useNativeDriver: true }
+  );
+  const reset = () => {
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 5 }),
+      Animated.spring(tx, { toValue: 0, useNativeDriver: true, friction: 5 }),
+      Animated.spring(ty, { toValue: 0, useNativeDriver: true, friction: 5 }),
+    ]).start();
+  };
+  const onState = (e) => { if (e.nativeEvent.oldState === State.ACTIVE) reset(); };
+  return (
+    <PinchGestureHandler ref={pinchRef} simultaneousHandlers={panRef} onGestureEvent={onPinch} onHandlerStateChange={onState}>
+      <Animated.View style={styles.viewerImage}>
+        <PanGestureHandler ref={panRef} simultaneousHandlers={pinchRef} minPointers={2} onGestureEvent={onPan} onHandlerStateChange={onState}>
+          <Animated.Image source={source} resizeMode="contain" style={[StyleSheet.absoluteFill, { transform: [{ translateX: tx }, { translateY: ty }, { scale }] }]} />
+        </PanGestureHandler>
+      </Animated.View>
+    </PinchGestureHandler>
+  );
+}
 
 const ONBOARDING_EXAMPLES = [
   'Sunday pancakes',
@@ -347,34 +381,10 @@ export default function Swipe() {
     });
   }
 
-  const pinchScale = useRef(new Animated.Value(1)).current;
-  const zoomTx = useRef(new Animated.Value(0)).current;
-  const zoomTy = useRef(new Animated.Value(0)).current;
-  const [zooming, setZooming] = useState(false);
-  const pinchRef = useRef();
-  const zoomPanRef = useRef();
-
-  const onPinchEvent = Animated.event([{ nativeEvent: { scale: pinchScale } }], { useNativeDriver: true });
-  const onZoomPanEvent = Animated.event(
-    [{ nativeEvent: { translationX: zoomTx, translationY: zoomTy } }],
-    { useNativeDriver: true },
-  );
-
-  const resetZoom = () => {
-    Animated.parallel([
-      Animated.spring(pinchScale, { toValue: 1, useNativeDriver: true, friction: 5 }),
-      Animated.spring(zoomTx, { toValue: 0, useNativeDriver: true, friction: 5 }),
-      Animated.spring(zoomTy, { toValue: 0, useNativeDriver: true, friction: 5 }),
-    ]).start(() => setZooming(false));
-  };
-
-  const onPinchStateChange = (event) => {
-    if (event.nativeEvent.state === State.ACTIVE) setZooming(true);
-    if (event.nativeEvent.oldState === State.ACTIVE) resetZoom();
-  };
-  const onZoomPanStateChange = (event) => {
-    if (event.nativeEvent.oldState === State.ACTIVE) resetZoom();
-  };
+  // Tap the card art to open it full-screen (pinch-to-zoom there). Zooming in
+  // place inside the card frame clipped the image and looked broken, so the
+  // deck now hands off to the same full-screen viewer the memory gallery uses.
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -598,45 +608,26 @@ export default function Swipe() {
           </View>
         ) : (
           <>
-            <PinchGestureHandler
-              ref={pinchRef}
-              simultaneousHandlers={zoomPanRef}
-              onGestureEvent={onPinchEvent}
-              onHandlerStateChange={onPinchStateChange}
-            >
-              <Animated.View style={[styles.cardImage, zooming && { zIndex: 100, elevation: 20, overflow: 'visible' }]}>
-                <PanGestureHandler
-                  ref={zoomPanRef}
-                  simultaneousHandlers={pinchRef}
-                  minPointers={2}
-                  onGestureEvent={onZoomPanEvent}
-                  onHandlerStateChange={onZoomPanStateChange}
-                >
-                  {activity.image_url ? (
-                    <Animated.Image
-                      key={activity.id}
-                      source={{ uri: resolveImage(activity.image_url) }}
-                      style={[
-                        StyleSheet.absoluteFill,
-                        {
-                          opacity: revealOpacity,
-                          transform: [
-                            { translateX: zoomTx },
-                            { translateY: zoomTy },
-                            { scale: pinchScale },
-                          ],
-                        },
-                      ]}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <Animated.Text key={activity.id} style={[styles.categoryIcon, { opacity: revealOpacity }]}>
-                      {getCategoryIcon(activity.category_name)}
-                    </Animated.Text>
-                  )}
-                </PanGestureHandler>
-              </Animated.View>
-            </PinchGestureHandler>
+            {activity.image_url ? (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => setViewerOpen(true)}
+                style={styles.cardImage}
+              >
+                <Animated.Image
+                  key={activity.id}
+                  source={{ uri: resolveImage(activity.image_url) }}
+                  style={[StyleSheet.absoluteFill, { opacity: revealOpacity }]}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.cardImage}>
+                <Animated.Text key={activity.id} style={[styles.categoryIcon, { opacity: revealOpacity }]}>
+                  {getCategoryIcon(activity.category_name)}
+                </Animated.Text>
+              </View>
+            )}
             <View style={styles.cardContent}>
               {activity.__nudge && (
                 <View style={styles.nudgeBadge}>
@@ -696,6 +687,28 @@ export default function Swipe() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Full-screen art viewer: tap the card image to open, pinch to zoom
+          over the whole screen, tap to close. Own GestureHandlerRootView
+          because Modals render outside the app root's handler tree. */}
+      <Modal
+        visible={viewerOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setViewerOpen(false)}
+      >
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
+          <TapGestureHandler onActivated={() => setViewerOpen(false)}>
+            <View style={styles.viewerPage}>
+              {activity.image_url ? (
+                <ZoomableImage source={{ uri: resolveImage(activity.image_url) }} />
+              ) : null}
+            </View>
+          </TapGestureHandler>
+        </GestureHandlerRootView>
+      </Modal>
 
       <Modal visible={customFormVisible} transparent animationType="slide" onRequestClose={cancelCustomForm}>
         <KeyboardAvoidingView
@@ -951,6 +964,8 @@ const styles = StyleSheet.create({
   categoryIcon: {
     fontSize: 80,
   },
+  viewerPage: { width: SCREEN_W, height: SCREEN_H, alignItems: 'center', justifyContent: 'center' },
+  viewerImage: { width: SCREEN_W, height: '82%' },
   cardContent: {
     padding: 24,
     alignItems: 'center',
