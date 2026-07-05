@@ -136,11 +136,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   ticks: {
-    fontSize: 10,
-    color: colors.success,
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#16C34A',
     alignSelf: 'flex-end',
     marginTop: 2,
-    letterSpacing: -3,
+    letterSpacing: -2,
   },
   empty: {
     fontSize: 14,
