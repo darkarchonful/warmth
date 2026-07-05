@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   },
   ticks: {
     fontSize: 10,
-    color: 'rgba(255,255,255,0.7)',
+    color: colors.success,
     alignSelf: 'flex-end',
     marginTop: 2,
     letterSpacing: -3,
