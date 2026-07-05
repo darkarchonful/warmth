@@ -10,9 +10,9 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 // Telegram-style delivery ticks: a single check when delivered, an overlapping
 // double-check when the partner has read it (the second ✓ is pulled left so the
-// two overlap like Telegram's, not two spaced-out ✓✓). Telegram's tick blue,
-// which also reads clearly on the warm/tan outgoing bubble.
-const TICK_BLUE = '#40A7E3';
+// two overlap like Telegram's, not two spaced-out ✓✓). Deep green, which reads
+// clearly on the warm/tan outgoing bubble.
+const TICK_COLOR = '#15803D';
 function Ticks({ read }) {
   if (!read) return <Text style={[styles.tick, styles.tickSolo]}>✓</Text>;
   return (
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
   tick: {
     fontSize: 13,
     fontWeight: '700',
-    color: TICK_BLUE,
+    color: TICK_COLOR,
   },
   tickSolo: {
     alignSelf: 'flex-end',
