@@ -195,7 +195,9 @@ export default function Memories() {
           <Text style={[styles.back, { textAlign: 'left' }]}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Our Memories</Text>
-        <View style={styles.headerSide} />
+        <TouchableOpacity style={styles.headerSide} hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }} onPress={() => router.push('/memories/story')}>
+          <Text style={[styles.storyLink, { textAlign: 'right' }]}>Story</Text>
+        </TouchableOpacity>
       </View>
 
       {memories.length === 0 ? (
@@ -237,6 +239,7 @@ const styles = StyleSheet.create({
   },
   headerSide: { flex: 1 },
   back: { fontSize: 14, color: colors.accent, fontWeight: '500' },
+  storyLink: { fontSize: 14, color: colors.accent, fontWeight: '600' },
   title: { flex: 1, fontSize: 18, color: colors.text, fontWeight: '300', textAlign: 'center' },
   item: {
     backgroundColor: colors.card,
