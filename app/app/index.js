@@ -5,7 +5,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import { colors } from '../lib/colors';
-import { api, API_URL, loadToken, saveToken, clearToken } from '../lib/api';
+import { api, loadToken, saveToken, clearToken } from '../lib/api';
 import { registerForPush } from '../lib/push';
 import Toast from '../components/Toast';
 
@@ -158,28 +158,6 @@ export default function Home() {
     } catch (e) {
       if (e.code === 'ERR_REQUEST_CANCELED') return; // user dismissed the sheet
       setError('Apple sign-in failed: ' + e.message);
-    }
-  }
-
-  // Dev login (skip Google for now)
-  async function devLogin(name, email) {
-    setError('Logging in...');
-    try {
-      const res = await fetch(`${API_URL}/auth/dev`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email }),
-      });
-      const data = await res.json();
-      await saveToken(data.token);
-      const me = await api.me();
-      setUser(me.user);
-      setCouple(me.couple);
-      setError('');
-      registerForPush();
-      if (me.couple?.paired_at) router.replace('/swipe');
-    } catch (e) {
-      setError('Error: ' + e.message);
     }
   }
 
@@ -390,24 +368,6 @@ export default function Home() {
         >
           <Text style={styles.googleButtonText}>Continue with email</Text>
         </TouchableOpacity>
-
-        {__DEV__ && (
-          <View style={styles.devBox}>
-            <Text style={styles.devLabel}>Dev Login</Text>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => devLogin('Alice', 'alice@test.com')}
-            >
-              <Text style={styles.buttonText}>Login as Alice</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.button, { marginTop: 10 }]}
-              onPress={() => devLogin('Bob', 'bob@test.com')}
-            >
-              <Text style={styles.buttonText}>Login as Bob</Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
     );
   }
@@ -569,22 +529,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '500',
-  },
-  devBox: {
-    marginTop: 20,
-    padding: 20,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  devLabel: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginBottom: 12,
   },
   inviteBox: {
     marginTop: 20,
