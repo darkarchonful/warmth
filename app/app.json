@@ -22,13 +22,13 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.dbtvault.warmth",
+      "bundleIdentifier": "tech.dbtvault-solutions.warmth",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.dbtvault.warmth",
+      "package": "tech.dbtvault-solutions.warmth",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
