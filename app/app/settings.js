@@ -200,7 +200,7 @@ export default function Settings() {
 
           <Text style={styles.sectionLabel}>Account actions</Text>
           <View style={styles.card}>
-            <Action label="Log out" onPress={handleLogout} disabled={working} />
+            <Action label="Log out" onPress={() => setConfirm('logout')} disabled={working} />
             <Action
               label="Delete account"
               sub="Permanently removes your account and all data"
@@ -225,6 +225,17 @@ export default function Settings() {
           danger
           working={working}
           onConfirm={() => { setConfirm(null); handleUnpair(); }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+
+      {confirm === 'logout' && (
+        <ConfirmModal
+          title="Log out?"
+          body="You'll be signed out on this device. Your account and shared data stay safe — just sign back in anytime."
+          confirmLabel="Log out"
+          working={working}
+          onConfirm={() => { setConfirm(null); handleLogout(); }}
           onCancel={() => setConfirm(null)}
         />
       )}
