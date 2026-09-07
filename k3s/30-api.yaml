@@ -50,18 +50,22 @@ spec:
           - 8.8.8.8
       containers:
         - name: api
-          image: ghcr.io/darkarchonful/warmth-api:v47
+          image: ghcr.io/darkarchonful/warmth-api:v48
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
             - name: APP_VERSION
-              value: "v47"
+              value: "v48"
             - name: APPLE_BUNDLE_ID
               value: "tech.dbtvault-solutions.warmth"
-            # TODO: remove before public launch — testing bypass for daily cap
+            # Daily swipe cap ENABLED for free-first launch (no premium yet — the
+            # cap resets daily and is a gentle habit mechanic, no paywall). Demo
+            # review accounts are exempt in code (see /activities/next).
             - name: DISABLE_SWIPE_LIMIT
-              value: "1"
+              value: "0"
+            - name: DAILY_SWIPE_LIMIT
+              value: "8"
             # Re-pair cooldown in hours; 0 = disabled for testing/App Review.
             # TODO: set to 48 post-launch to restore anti-churn protection.
             - name: REPAIR_COOLDOWN_HOURS
