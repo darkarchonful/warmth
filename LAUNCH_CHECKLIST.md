@@ -10,11 +10,11 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 ---
 
 ## 1. Apple account & legal  (critical path)
-- ⬜ Enroll / activate the **Armenia IE** Apple Developer account (prepay was planned ~2026-05-31)
-- ⬜ Create the App Store Connect **app record** under the Armenia team (new bundle id or app transfer)
-- ⬜ Generate fresh **signing credentials** (distribution cert + provisioning profile) on the Armenia team
+- ✅ Enroll / activate the Apple Developer account — **Armenia Individual** (not IE), Team `6P6BXDX8K8`, active 2026-08-25
+- ✅ Create the App Store Connect **app record** — "Warmth: Ideas for Two", ascAppId `6808587453`, bundle `tech.dbtvault-solutions.warmth`
+- ✅ Generate fresh **signing credentials** on the Armenia team (dist cert + profile + APNs, stored on EAS) — TestFlight build **5** live + smoke-tested (launch, Apple/Google/email sign-in, data load all pass) 2026-09-07
 - ⬜ Sign the **Paid Applications Agreement** (required before any IAP works)
-- ⬜ Complete **banking + tax** info on the Armenia entity (W-8/tax forms)
+- ⬜ Complete **banking + tax** info (W-8/tax forms) — needed for paid/IAP
 
 ## 2. App Store Connect listing
 - ✅ **Listing copy drafted** — name, subtitle, description, keywords, categories in `docs/APP_STORE_LISTING.md` (still needs entering into ASC)
