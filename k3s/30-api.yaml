@@ -58,7 +58,7 @@ spec:
             - name: APP_VERSION
               value: "v47"
             - name: APPLE_BUNDLE_ID
-              value: "com.dbtvault.warmth"
+              value: "tech.dbtvault-solutions.warmth"
             # TODO: remove before public launch — testing bypass for daily cap
             - name: DISABLE_SWIPE_LIMIT
               value: "1"

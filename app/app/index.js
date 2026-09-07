@@ -58,9 +58,17 @@ export default function Home() {
   }, []);
 
   // Seed the name field once when a freshly-registered user needs to confirm
-  // their name — pre-filled with whatever we derived (often from their email).
+  // their name. Normally pre-fill whatever we derived (e.g. a real name from
+  // Google). But Sign in with Apple with a hidden email derives the name from
+  // the private-relay address, so it's a random code, not a name — never
+  // pre-fill that; leave it blank so the user types a real one.
   useEffect(() => {
-    if (user && !user.name_confirmed) setNameDraft(user.name || '');
+    if (user && !user.name_confirmed) {
+      const relayDerived =
+        user.email?.endsWith('@privaterelay.appleid.com') &&
+        user.name === user.email.split('@')[0];
+      setNameDraft(relayDerived ? '' : (user.name || ''));
+    }
   }, [user?.id, user?.name_confirmed]);
 
   useEffect(() => {
@@ -203,6 +211,18 @@ export default function Home() {
     setEmailInput('');
     setCodeInput('');
     setError('');
+  }
+
+  // Escape hatch from the name-confirm screen: if someone signed in with the
+  // wrong account there's otherwise no way back. Clears the session and
+  // returns to the login screen.
+  async function signOut() {
+    await clearToken();
+    setUser(null);
+    setCouple(null);
+    setNameDraft('');
+    setError('');
+    setEmailMode(null);
   }
 
   async function saveName() {
@@ -405,6 +425,11 @@ export default function Home() {
               disabled={savingName}
             >
               <Text style={styles.buttonText}>{savingName ? 'Saving…' : 'Continue'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={signOut} style={{ marginTop: 18 }}>
+              <Text style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center' }}>
+                Not you? Sign out
+              </Text>
             </TouchableOpacity>
           </View>
         </TouchableWithoutFeedback>
