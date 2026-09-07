@@ -915,7 +915,11 @@ app.get('/activities/next', auth, async (req, res) => {
 
   // Daily ration with spread days and completion bonus.
   // Spread-day heuristic: ~1/3 of days, fewer cards early, full cap by evening.
-  const disableLimit = process.env.DISABLE_SWIPE_LIMIT === '1';
+  // App Review demo accounts are exempt from the daily cap so a reviewer can
+  // explore the deck freely without hitting "come back tomorrow".
+  const disableLimit =
+    process.env.DISABLE_SWIPE_LIMIT === '1' ||
+    DEMO_EMAILS.includes(req.user.email);
   const BASE_CAP = parseInt(process.env.DAILY_SWIPE_LIMIT || '8', 10);
   const today = new Date();
   const dateKey = today.toISOString().slice(0, 10);
