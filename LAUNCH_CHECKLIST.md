@@ -16,14 +16,15 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ⬜ Sign the **Paid Applications Agreement** (required before any IAP works)
 - ⬜ Complete **banking + tax** info (W-8/tax forms) — needed for paid/IAP
 
-## 2. App Store Connect listing
-- ✅ **Listing copy drafted** — name, subtitle, description, keywords, categories in `docs/APP_STORE_LISTING.md` (still needs entering into ASC)
-- ✅ **Screenshots captured** — 5-shot set (swipe / match / plans / plan+comment / memory) via demo account, apostrophes fixed in seed. Plan in `docs/APP_STORE_SCREENSHOTS.md`. ⬜ still needs uploading to ASC (6.7" slot, order 1→5) once the Armenia app record exists
-- ✅ **App icon 1024×1024** — variant A (interlocking swirl), `app/assets/icon.png`, shipped in build 20
-- ✅ **Privacy Policy URL** — https://dbtvault-solutions.tech/warmth/privacy/ (canonical, on the static site; old API /privacy 301-redirects here)
-- ✅ **Support URL** — https://dbtvault-solutions.tech/warmth/support/ (canonical, on the static site; old API /support 301-redirects here) · ⬜ optional marketing URL
-- ✅ **App Privacy "nutrition label"** — paste-ready ASC answers in `docs/APP_PRIVACY_NUTRITION_LABEL.md` (all data Linked / App Functionality / **not** tracking; no location, no ad SDKs). ⬜ still needs entering into ASC
-- ✅ **Age rating questionnaire** — answers in `docs/APP_AGE_RATING.md`, lands at **12+**. ⬜ still needs entering into ASC
+## 2. App Store Connect listing  — ALL ENTERED INTO ASC 2026-09-07
+- ✅ **Listing copy** — name "Warmth: Ideas for Two", subtitle, description, keywords, categories (Lifestyle / Social Networking) entered in ASC. Source `docs/APP_STORE_LISTING.md`
+- ✅ **Screenshots uploaded** — 5-shot set entered in ASC. NOTE: the slot required **1284×2778** (not 1290×2796); upload-ready set generated at `docs/screens/upload6528/` from fresh iPhone 15 Pro Max captures (`docs/screens/IMG_*.jpeg`). Old 1290×2796 set (`docs/screens/upload/`) was rejected by that slot.
+- ✅ **App icon 1024×1024** — variant A (interlocking swirl), `app/assets/icon.png`
+- ✅ **Privacy Policy URL** entered — https://dbtvault-solutions.tech/warmth/privacy/ (found under **App Privacy** page in current ASC, not App Information)
+- ✅ **Support URL** entered — https://dbtvault-solutions.tech/warmth/support/ · ⬜ optional marketing URL
+- ✅ **App Privacy "nutrition label"** entered in ASC (all data Linked / App Functionality / **not** tracking; no location, no ad SDKs). Source `docs/APP_PRIVACY_NUTRITION_LABEL.md`
+- ✅ **Age rating** entered — new 2025 questionnaire computed 9+, **manually raised to 13+** (the new system's equivalent of the old 12+; bands are now 4+/9+/13+/16+/18+). Source `docs/APP_AGE_RATING.md`
+- ✅ **Pricing** — set to **Free** in Pricing and Availability (required field; no Paid Apps agreement needed for a free app)
 
 ## 3. Guideline compliance
 - ✅ **Sign in with Apple** (required alongside Google sign-in) — built
@@ -57,10 +58,15 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ⬜ DB indexes / partitioning review for scale
 
 ## 8. Pre-submit final checks
-- ⬜ Fresh production build on the Armenia team, channel `production`, runtime matches OTA
-- ⬜ Smoke test the full flow on a clean device: register → pair → swipe → plan → nudge → premium
-- ⬜ Confirm push notifications deliver on a release build
-- ⬜ Submit for review with demo account + notes
+- ✅ Fresh production build on the Armenia team — **build 5** (1.0, runtime `4beb720e`), channel `production`, on TestFlight
+- ⏳ Smoke test on a clean device — ✅ launch + Apple/Google/email sign-in + data load pass; register→pair→plan→nudge not fully re-run (premium N/A, free-first)
+- ⬜ **Confirm push notifications deliver on the release build (build 5)** — NOT yet verified
+- ⬜ Submit for review with demo account + notes — reached the **«Отправить на проверку»** button (all required fields validated); holding on the emoji/card-images blocker (§6)
+
+---
+
+## LAUNCH PATH DECISION (2026-09-07): FREE-FIRST
+Build 5 = master (no paywall; `premium-monetization` unmerged), so the first release is a **FREE app, no IAP**. That means §1 Paid Apps/banking, §3 IAP, and all of §4 are **NOT blockers** — deferred until premium ships as a later build. Only hard blocker remaining = **§6 real card images** (emoji placeholders → placeholder-content rejection risk). Also verify before submit: push on build 5, TLS cert health (§7). Keep `DISABLE_SWIPE_LIMIT` ON for free-only (no premium to justify a cap).
 
 ---
 
