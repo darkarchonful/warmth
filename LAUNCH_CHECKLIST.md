@@ -30,7 +30,7 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ✅ **Sign in with Apple** (required alongside Google sign-in) — built
 - ✅ **In-app account deletion** (guideline 5.1.1(v)) — shipped (settings → delete)
 - ⬜ **Real IAP via StoreKit** (see §4) — digital premium must use Apple IAP
-- ⬜ Remove `DISABLE_SWIPE_LIMIT` env flag before public release
+- ✅ **Daily swipe cap ENABLED** for launch — `DISABLE_SWIPE_LIMIT=0`, `DAILY_SWIPE_LIMIT=8` (API v48). Gentle "come back tomorrow" cap, no paywall (master has no premium UI). Demo/review accounts exempt in code so a reviewer is never blocked.
 - ⬜ Export compliance / encryption declaration (HTTPS-only → standard exemption)
 
 ## 4. In-App Purchase / monetization
@@ -66,7 +66,7 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 ---
 
 ## LAUNCH PATH DECISION (2026-09-07): FREE-FIRST
-Build 5 = master (no paywall; `premium-monetization` unmerged), so the first release is a **FREE app, no IAP**. That means §1 Paid Apps/banking, §3 IAP, and all of §4 are **NOT blockers** — deferred until premium ships as a later build. Only hard blocker remaining = **§6 real card images** (emoji placeholders → placeholder-content rejection risk). Also verify before submit: push on build 5, TLS cert health (§7). Keep `DISABLE_SWIPE_LIMIT` ON for free-only (no premium to justify a cap).
+Build 5 = master (no paywall; `premium-monetization` unmerged), so the first release is a **FREE app, no IAP**. That means §1 Paid Apps/banking, §3 IAP, and all of §4 are **NOT blockers** — deferred until premium ships as a later build. Only hard blocker remaining = **§6 real card images** (emoji placeholders → placeholder-content rejection risk). Also verify before submit: push on build 5, TLS cert health (§7). DECISION 2026-09-07: **enabled the daily swipe cap** (`DISABLE_SWIPE_LIMIT=0`, limit 8, demo-exempt) as a habit mechanic even without premium — the blocked state is a "come back tomorrow" screen with no paywall, so it's review-safe; sets up the premium "unlimited" upsell later.
 
 ---
 
