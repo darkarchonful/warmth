@@ -6,15 +6,17 @@ verify in ASC before submitting. Pick one option where alternatives are given.
 ---
 
 ## App Name  (max 30 chars)
-**Warmth: Date Ideas for Two**  *(28)*
+**Warmth: Ideas for Two**  *(21)*  — CHOSEN 2026-08-25
 
-Alternatives:
+Rationale: broader/more accurate than "date ideas" (app covers activities,
+plans, memories, not just dates), still clearly couple-focused, and unique
+(bare "Warmth" is reserved by the old UK test-rig app record → name collision).
+"date" search weight moved to the Keywords field + subtitle instead.
+
+Alternatives (also unique, if the chosen one is ever taken):
+- `Warmth: Date Ideas for Two` *(28)*
 - `Warmth — Couples Date Ideas` *(27)*
 - `Warmth: Plan Dates Together` *(27)*
-- `Warmth` *(6 — cleanest, but weaker for search)*
-
-> Recommendation: lead with the brand + a keyword-rich tail. "Date Ideas for
-> Two" carries search weight and says what it is at a glance.
 
 ## Subtitle  (max 30 chars)
 **Swipe, match, make memories**  *(28)*
