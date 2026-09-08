@@ -13,8 +13,8 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ✅ Enroll / activate the Apple Developer account — **Armenia Individual** (not IE), Team `6P6BXDX8K8`, active 2026-08-25
 - ✅ Create the App Store Connect **app record** — "Warmth: Ideas for Two", ascAppId `6808587453`, bundle `tech.dbtvault-solutions.warmth`
 - ✅ Generate fresh **signing credentials** on the Armenia team (dist cert + profile + APNs, stored on EAS) — TestFlight build **5** live + smoke-tested (launch, Apple/Google/email sign-in, data load all pass) 2026-09-07
-- ⬜ Sign the **Paid Applications Agreement** (required before any IAP works)
-- ⬜ Complete **banking + tax** info (W-8/tax forms) — needed for paid/IAP
+- ⬜ Sign the **Paid Applications Agreement** (online in ASC → Business; required before any IAP works) — premium-only, not needed for free launch
+- ⬜ Complete **banking + tax** info — 100% online in ASC. Armenia is a supported payout country; use the Armenian bank account (name = "Aleksei Nesterov", matches the Apple ID ✓ confirmed 2026-09-08). Tax form = **W-8BEN** (non-US individual). Enroll in the **Apple Small Business Program** (online) first → 15% commission instead of 30%.
 
 ## 2. App Store Connect listing  — ALL ENTERED INTO ASC 2026-09-07
 - ✅ **Listing copy** — name "Warmth: Ideas for Two", subtitle, description, keywords, categories (Lifestyle / Social Networking) entered in ASC. Source `docs/APP_STORE_LISTING.md`
