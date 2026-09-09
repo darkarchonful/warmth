@@ -7,6 +7,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { colors } from '../../lib/colors';
 import { api, imageSource } from '../../lib/api';
 import CommentThread from '../../components/CommentThread';
+import DriftImage from '../../components/DriftImage';
 
 const SCREEN_W = Dimensions.get('window').width;
 
@@ -242,7 +243,9 @@ export default function MemoryDetail() {
             {cards.map((c, i) => (
               <View key={c.id != null ? `p${c.id}` : `art${i}`} style={styles.photoCardWrap}>
                 <TouchableOpacity activeOpacity={0.85} onPress={() => openGallery(i)}>
-                  <Image source={imageSource(c.url)} style={styles.photoCard} resizeMode="cover" />
+                  <View style={[styles.photoCard, { overflow: 'hidden' }]}>
+                    <DriftImage source={imageSource(c.url)} style={StyleSheet.absoluteFill} />
+                  </View>
                   {c.label ? <Text style={styles.photoCardLabel}>{c.label}</Text> : null}
                 </TouchableOpacity>
                 {c.mine && c.id != null && !photoBusy && (
