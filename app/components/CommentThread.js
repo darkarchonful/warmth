@@ -40,6 +40,10 @@ export default function CommentThread({ parentType, parentId, meId, header }) {
       // curve — the layout change rides the same native animation as the keyboard.
       Keyboard.scheduleLayoutAnimation(e);
       setKbH(e.endCoordinates?.height ?? 0);
+      // Jump to the newest message so the conversation + input sit above the
+      // keyboard. The memory/plan card is a tall list header, so without this
+      // you'd still be staring at the header when you start typing.
+      setTimeout(() => listRef.current?.scrollToEnd?.({ animated: true }), 60);
     };
     const onHide = (e) => {
       Keyboard.scheduleLayoutAnimation(e);
@@ -112,6 +116,7 @@ export default function CommentThread({ parentType, parentId, meId, header }) {
           style={styles.input}
           value={text}
           onChangeText={setText}
+          onFocus={() => setTimeout(() => listRef.current?.scrollToEnd?.({ animated: true }), 60)}
           placeholder="Write a message..."
           placeholderTextColor={colors.textMuted}
           multiline
