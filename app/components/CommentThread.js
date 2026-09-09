@@ -83,7 +83,7 @@ export default function CommentThread({ parentType, parentId, meId, header }) {
   }
 
   return (
-    <View style={{ flex: 1, paddingBottom: kbH }}>
+    <View style={{ flex: 1, paddingBottom: kbH > 0 ? kbH + 14 : 0 }}>
       <FlatList
         ref={listRef}
         style={{ flex: 1 }}
