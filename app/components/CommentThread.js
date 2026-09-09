@@ -82,6 +82,7 @@ export default function CommentThread({ parentType, parentId, meId, header }) {
     <View style={{ flex: 1, paddingBottom: kbH }}>
       <FlatList
         ref={listRef}
+        style={{ flex: 1 }}
         data={comments}
         keyExtractor={(c) => c.id.toString()}
         contentContainerStyle={{ padding: 20, paddingBottom: 10 }}
