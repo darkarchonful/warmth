@@ -89,7 +89,7 @@ export default function CommentThread({ parentType, parentId, meId, header }) {
         style={{ flex: 1 }}
         data={comments}
         keyExtractor={(c) => c.id.toString()}
-        contentContainerStyle={{ padding: 20, paddingBottom: 10 }}
+        contentContainerStyle={{ padding: 20, paddingBottom: 4 }}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={header || null}
         // The header carries live state (rating stars, note, photos). It's a
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 14,
-    paddingTop: 8,
+    paddingTop: 4,
     paddingBottom: 20,
     borderTopWidth: 1,
     borderTopColor: colors.line || '#eee',
