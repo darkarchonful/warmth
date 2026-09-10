@@ -89,7 +89,7 @@ export default function CommentThread({ parentType, parentId, meId, header }) {
         style={{ flex: 1 }}
         data={comments}
         keyExtractor={(c) => c.id.toString()}
-        contentContainerStyle={{ padding: 20, paddingBottom: 4 }}
+        contentContainerStyle={{ padding: 20, paddingBottom: 8 }}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={header || null}
         // The header carries live state (rating stars, note, photos). It's a
