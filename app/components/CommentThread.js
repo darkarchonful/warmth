@@ -43,7 +43,15 @@ export default function CommentThread({ parentType, parentId, meId, header }) {
       // Jump to the newest message so the conversation + input sit above the
       // keyboard. The memory/plan card is a tall list header, so without this
       // you'd still be staring at the header when you start typing.
+      //
+      // The list shrinks from the bottom as the keyboard rises, so a single
+      // scroll fired mid-animation under-shoots and leaves the last message
+      // tucked behind the input. Scroll once immediately and again once the
+      // keyboard's own animation has settled (its exact duration) so we land
+      // on the true bottom regardless of timing.
+      const dur = e.duration ?? 250;
       setTimeout(() => listRef.current?.scrollToEnd?.({ animated: true }), 60);
+      setTimeout(() => listRef.current?.scrollToEnd?.({ animated: false }), dur + 40);
     };
     const onHide = (e) => {
       Keyboard.scheduleLayoutAnimation(e);
@@ -87,6 +95,10 @@ export default function CommentThread({ parentType, parentId, meId, header }) {
       <FlatList
         ref={listRef}
         style={{ flex: 1 }}
+        // When the keyboard opens the list frame shrinks; re-pin to the bottom
+        // on that relayout so the last message keeps its gap above the input
+        // instead of hiding behind it (no manual scroll needed).
+        onLayout={() => { if (kbH > 0) listRef.current?.scrollToEnd?.({ animated: false }); }}
         data={comments}
         keyExtractor={(c) => c.id.toString()}
         contentContainerStyle={{ padding: 20, paddingBottom: 8 }}
