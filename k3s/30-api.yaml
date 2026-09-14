@@ -50,7 +50,7 @@ spec:
           - 8.8.8.8
       containers:
         - name: api
-          image: ghcr.io/darkarchonful/warmth-api:v49
+          image: ghcr.io/darkarchonful/warmth-api:v50
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
