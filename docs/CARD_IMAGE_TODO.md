@@ -1,6 +1,6 @@
 # Warmth — Card Image TODO (current missing set)
 
-**111 cards still need Midjourney art** — regenerated 2026-09-09 from the live DB (supersedes the stale counts in CARD_IMAGE_PROMPTS.md). Prompts rewritten 2026-09-11 for variety — each scene now has its own setting, camera angle and light so the cards stop looking alike.
+**116 cards still need Midjourney art** — regenerated 2026-09-09 from the live DB (supersedes the stale counts in CARD_IMAGE_PROMPTS.md). Prompts rewritten 2026-09-11 for variety — each scene now has its own setting, camera angle and light so the cards stop looking alike. +5 new activities added 2026-09-14 (ids 256–260).
 
 ## How to use
 1. Append your original **`--sref <code>`** (+ `--v 6`) to every prompt so new cards share the palette/finish of the existing set.
@@ -22,8 +22,9 @@ Every old prompt was `<5-word scene> + <30 words of identical boilerplate>`, so 
 ## Adventures  (1)
 **243.jpg** — Axe-throwing night — two people at an indoor axe-throwing lane at night, seen from behind as one draws a hatchet back toward a distant wooden target, caged lanes and a chalk scoreboard, a pool of warm amber light over the lane, deep shadows, low three-quarter angle, faces unseen, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 
-## Chill  (1)
+## Chill  (2)
 **96.jpg** — Bubble bath with music — overhead top-down view of a candlelit bathtub full of foam, two people reclining at opposite ends with only knees and shoulders above the bubbles, a phone propped up playing music, steam rising, warm low light, heads out of frame, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
+**260.jpg** — Explore a Minecraft world together — two people on a couch at night sharing a laptop that glows with a blocky voxel game world on screen, seen from behind over their shoulders, a game controller and two mugs beside them, cozy dim room, warm screen light on their hands, faces unseen, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 
 ## Creative  (23)
 **98.jpg** — Make pasta from scratch — close-up of four floury hands stretching a sheet of fresh pasta over a wooden board, flour dust in the air, a rolling pin and egg yolks nearby, sunlit kitchen counter, shot from above, faces out of frame, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
@@ -63,7 +64,7 @@ Every old prompt was `<5-word scene> + <30 words of identical boilerplate>`, so 
 **229.jpg** — Winter farmers market morning — a couple walking through an outdoor winter market seen from behind, warm paper cups in gloved hands, stalls of vegetables and evergreen boughs, cold breath, muted winter light, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **245.jpg** — Build the flat-pack furniture — two people on a living-room floor surrounded by flat-pack furniture parts, an instruction sheet and an allen key between them, seen from the side mid-assembly, cardboard everywhere, warm daylight, playful exasperation, faces down, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 
-## Food  (18)
+## Food  (20)
 **114.jpg** — Homemade pizza night — close-up of hands sliding a homemade pizza off a wooden peel, flour and fresh basil, a hot oven glowing behind, warm kitchen night light, high angle, faces out of frame, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **115.jpg** — Brunch at a new spot — a sunny café table seen from above, plates of eggs and pancakes, two coffees, a hand reaching across, bright morning light, top-down flat-lay with laps just in frame, no faces, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **116.jpg** — Ice cream stand crawl — a couple walking a summer street holding dripping ice-cream cones, seen from behind, pastel storefronts, warm sun, two cones raised, bright and playful, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
@@ -82,6 +83,8 @@ Every old prompt was `<5-word scene> + <30 words of identical boilerplate>`, so 
 **239.jpg** — Mix warm winter drinks — close-up of hands garnishing steaming mugs of mulled cider with cinnamon sticks and orange slices, spices scattered on the counter, warm dim kitchen, evening, no faces, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **246.jpg** — Backyard grill and a cold beer — a couple at a backyard grill at dusk seen from behind, smoke curling up, two cold beer bottles in hand, string lights overhead, warm summer-evening glow, relaxed, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **247.jpg** — Hot wing challenge — two people at a table facing a platter of hot wings with a glass of milk on standby, seen from the side mid-laugh with watering eyes, napkins everywhere, warm light, flushed faces turned aside, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
+**256.jpg** — Cook over a bonfire — close-up of two hands roasting food on long sticks over a crackling bonfire at dusk, glowing embers and sparks rising, a cast-iron pan resting on the coals, warm orange firelight against deep blue evening, low angle, faces unseen, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
+**257.jpg** — Fresh seafood dinner out — overhead of a seaside restaurant table with a platter of fresh seafood (oysters, prawns, lemon wedges), two glasses of white wine, two people's hands reaching in, warm evening light off the water beyond, top-down flat-lay, no faces, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 
 ## Romance  (14)
 **122.jpg** — Write love letters and read aloud — close-up of a hand writing a love letter in cursive by candlelight, a sealed wax envelope and a second letter nearby, warm golden glow, intimate, no face, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
@@ -111,7 +114,7 @@ Every old prompt was `<5-word scene> + <30 words of identical boilerplate>`, so 
 **155.jpg** — Holiday lights walk — a couple bundled in scarves walking a street strung with holiday lights, seen from behind, snow underfoot, glowing bokeh lights, warm festive night, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **156.jpg** — Build a snowman — two people rolling a big snowball for a snowman, seen from the side, a carrot and scarf waiting, a snowy yard, bright overcast winter light, playful, faces turned down, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 
-## Sporty  (14)
+## Sporty  (16)
 **138.jpg** — Table tennis evening — two people mid-rally at a ping-pong table in a garage, seen from the side, a paddle raised and the ball caught in motion, warm overhead light, energetic, faces to the ball, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **139.jpg** — Pilates class together — a couple side by side on yoga mats in a bright studio holding a stretch, seen from behind, mirrors and soft daylight, calm athletic posture, faces forward and unseen, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **140.jpg** — Boxing class for two — two people in boxing gloves, one holding focus mitts for the other to punch, seen from the side in a gym, motion and sweat, warm gritty light, dynamic, faces in profile shadow, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
@@ -126,6 +129,8 @@ Every old prompt was `<5-word scene> + <30 words of identical boilerplate>`, so 
 **232.jpg** — Sauna and cold plunge together — two people wrapped in towels stepping from a wooden sauna toward a cold-plunge barrel, seen from behind, steam and frost in the air, warm wood against cool light, dramatic contrast, faceless, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **250.jpg** — Darts best of five — close-up of a hand releasing a dart toward a dartboard in a dim pub, a chalk scoreboard beside it, warm focused light over the board, the partner watching from the side, faces in shadow, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **253.jpg** — Archery range day — a couple at an outdoor archery range, one drawing a bow toward a distant target, seen from behind and the side, a quiver of arrows, soft field light, focused, faces to the target, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
+**258.jpg** — Basketball game together — two people playing one-on-one on an outdoor basketball court at golden hour, seen from behind as one rises for a layup and the other guards, chain-link fence and long shadows, dust and motion, faces unseen, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
+**259.jpg** — Scooter trip together — two people riding kick scooters side by side down a sunny tree-lined city path, seen from behind mid-glide, dappled light and long shadows, relaxed motion, faces unseen, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 
 ## Travel  (19)
 **146.jpg** — Book a random Airbnb — two people arriving at an unfamiliar cozy cabin with backpacks, seen from behind at the doorway, a key in hand, warm porch light, golden evening, the thrill of a new place, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
