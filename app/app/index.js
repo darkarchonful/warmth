@@ -9,6 +9,12 @@ import { api, loadToken, saveToken, clearToken } from '../lib/api';
 import { registerForPush } from '../lib/push';
 import Toast from '../components/Toast';
 
+// Install link appended to the invite share text so a partner who doesn't have
+// the app yet can get it. Env-driven (no hardcoded URL); the link only appears
+// once EXPO_PUBLIC_INVITE_URL is set (e.g. the App Store URL at launch) — until
+// then the share text is unchanged. Flipping it on is env + OTA, no native build.
+const INVITE_URL = process.env.EXPO_PUBLIC_INVITE_URL || '';
+
 WebBrowser.maybeCompleteAuthSession();
 
 export default function Home() {
@@ -469,7 +475,10 @@ export default function Home() {
                 onPress={async () => {
                   try {
                     await Share.share({
-                      message: `Let's pair on Warmth — use this code: ${myInvite}`,
+                      message: INVITE_URL
+                        ? `Let's pair on Warmth — use this code: ${myInvite}\n\nDon't have the app yet? Get it here: ${INVITE_URL}`
+                        : `Let's pair on Warmth — use this code: ${myInvite}`,
+                      ...(INVITE_URL ? { url: INVITE_URL } : {}),
                     });
                   } catch (e) {
                     setError(e.message);

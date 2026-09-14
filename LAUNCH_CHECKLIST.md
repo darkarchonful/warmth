@@ -53,6 +53,7 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 
 ## 7. Backend / infra hardening (from prod-gaps)
 - ⬜ **Restore re-pair cooldown post-launch** — set `REPAIR_COOLDOWN_HOURS: "48"` in `k3s/30-api.yaml` + re-apply (disabled at 0 for testing/review, code intact)
+- ⬜ **Set invite install link at launch** — set `EXPO_PUBLIC_INVITE_URL` to the App Store URL (+ Play later) and OTA; the invite share then appends "Get it here: <url>" so an unpartnered person can install. Plumbing built in `app/app/index.js` (invite share), no-op until the env is set. No native build needed.
 - ⬜ TLS cert auto-renewal check (warmth-api + edge)
 - ⬜ CI/CD for API image build + deploy (currently manual docker build → kubectl)
 - ⬜ Basic observability (error logging/alerting on the API + scheduler)
