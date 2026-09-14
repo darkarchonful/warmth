@@ -25,6 +25,10 @@ spec:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: DoNotSchedule
+          # Count only same-revision pods, so a rolling update's OLD pods don't
+          # skew the calc and let both new replicas land on one node (which is
+          # exactly how both ended up on Hetzner). Needs k8s 1.30+ (have 1.34).
+          matchLabelKeys: ["pod-template-hash"]
           labelSelector:
             matchLabels:
               app: warmth-api
