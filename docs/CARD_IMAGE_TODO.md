@@ -1,6 +1,6 @@
 # Warmth — Card Image TODO (current missing set)
 
-**116 cards still need Midjourney art** — regenerated 2026-09-09 from the live DB (supersedes the stale counts in CARD_IMAGE_PROMPTS.md). Prompts rewritten 2026-09-11 for variety — each scene now has its own setting, camera angle and light so the cards stop looking alike. +5 new activities added 2026-09-14 (ids 256–260).
+**113 cards still need Midjourney art** — synced to the live DB 2026-09-14 (exactly the activities where image_url IS NULL). Prompts rewritten 2026-09-11 for variety — each scene has its own setting, camera angle and light so the cards stop looking alike. Includes the 5 new activities added 2026-09-14 (ids 256–260). Done + removed from this list: 96, 99, 243.
 
 ## How to use
 1. Append your original **`--sref <code>`** (+ `--v 6`) to every prompt so new cards share the palette/finish of the existing set.
@@ -19,16 +19,11 @@ Every old prompt was `<5-word scene> + <30 words of identical boilerplate>`, so 
 
 ---
 
-## Adventures  (1)
-**243.jpg** — Axe-throwing night — two people at an indoor axe-throwing lane at night, seen from behind as one draws a hatchet back toward a distant wooden target, caged lanes and a chalk scoreboard, a pool of warm amber light over the lane, deep shadows, low three-quarter angle, faces unseen, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
-
-## Chill  (2)
-**96.jpg** — Bubble bath with music — overhead top-down view of a candlelit bathtub full of foam, two people reclining at opposite ends with only knees and shoulders above the bubbles, a phone propped up playing music, steam rising, warm low light, heads out of frame, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
+## Chill  (1)
 **260.jpg** — Explore a Minecraft world together — two people on a couch at night sharing a laptop that glows with a blocky voxel game world on screen, seen from behind over their shoulders, a game controller and two mugs beside them, cozy dim room, warm screen light on their hands, faces unseen, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 
-## Creative  (23)
+## Creative  (22)
 **98.jpg** — Make pasta from scratch — close-up of four floury hands stretching a sheet of fresh pasta over a wooden board, flour dust in the air, a rolling pin and egg yolks nearby, sunlit kitchen counter, shot from above, faces out of frame, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
-**99.jpg** — Plant a small herb garden — two people crouched on a balcony potting basil and mint into terracotta pots, seen from the side, soil on their hands, a bag of potting mix, soft morning sun, small green leaves, low angle among the pots, faces hidden, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **100.jpg** — Learn calligraphy basics — extreme close-up of one hand guiding another that holds a dip pen mid-stroke on cream paper, a bottle of black ink and practice sheets, warm desk-lamp pool, shallow focus, no faces, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **101.jpg** — Try a magic trick each — a couple at a kitchen table, one fanning a deck of playing cards toward the other, seen over the shoulder, a coin and a silk scarf on the table, warm pendant light, playful gesture, faces turned away, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **102.jpg** — Origami challenge — overhead of two pairs of hands folding colored paper cranes on a pale table, scattered finished paper figures, crisp creases, soft daylight, top-down, heads cropped out of frame, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
