@@ -50,11 +50,15 @@ spec:
           - 8.8.8.8
       containers:
         - name: api
-          image: ghcr.io/darkarchonful/warmth-api:v50
+          image: ghcr.io/darkarchonful/warmth-api:v51
           imagePullPolicy: IfNotPresent
           env:
             - name: PORT
               value: "3000"
+            # /images/activities is proxied here (warmth-media Service ClusterIP,
+            # k3s/35-media.yaml). Update if the media Service is recreated.
+            - name: MEDIA_UPSTREAM
+              value: "http://10.43.244.213"
             - name: APP_VERSION
               value: "v48"
             - name: APPLE_BUNDLE_ID
