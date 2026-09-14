@@ -1,0 +1,70 @@
+# Static media (activity card art: <id>.jpg / <id>.mp4) served from a durable
+# Longhorn volume instead of being baked into the API image. Same availability
+# model as Postgres: ONE pod, an RWO volume whose blocks Longhorn replicates
+# across all nodes; on node loss Longhorn re-attaches and the pod reschedules.
+# Reached at /images/activities/* via a NodePort that the Hetzner-node nginx
+# routes to (see docs) — so the app URL is unchanged (no app rebuild).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-activities
+  namespace: warmth
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn        # default 3 replicas across nodes (durability)
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: warmth-media
+  namespace: warmth
+spec:
+  replicas: 1                       # single active instance (like Postgres); RWO
+  strategy:
+    type: Recreate                  # RWO can't be multi-attached during a rollout
+  selector:
+    matchLabels: { app: warmth-media }
+  template:
+    metadata:
+      labels: { app: warmth-media }
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: tier
+                    operator: In
+                    values: ["primary", "backup"]
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: media
+              mountPath: /usr/share/nginx/html/images/activities
+          readinessProbe:
+            httpGet: { path: /images/activities/, port: 80 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+      volumes:
+        - name: media
+          persistentVolumeClaim:
+            claimName: media-activities
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: warmth-media
+  namespace: warmth
+spec:
+  type: NodePort
+  selector: { app: warmth-media }
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30090
