@@ -17,7 +17,10 @@ spec:
     required:
       nodeSelectorTerms:
         - matchExpressions:
-            - key: tier
+            # Additive role= label (node keeps its tier=). Backups live on a
+            # NON-DB node (monthly-coral) so a Hetzner disk loss can't take the
+            # DB and its backups together.
+            - key: role
               operator: In
               values: ["backup"]
 ---
@@ -51,7 +54,7 @@ spec:
       template:
         spec:
           nodeSelector:
-            tier: backup
+            role: backup
           restartPolicy: OnFailure
           containers:
             - name: pgdump
