@@ -1,36 +1,28 @@
-# Static media (activity card art: <id>.jpg / <id>.mp4) served from a durable
-# Longhorn volume instead of being baked into the API image. Same availability
-# model as Postgres: ONE pod, an RWO volume whose blocks Longhorn replicates
-# across all nodes; on node loss Longhorn re-attaches and the pod reschedules.
-# Reached at /images/activities/* via a NodePort that the Hetzner-node nginx
-# routes to (see docs) — so the app URL is unchanged (no app rebuild).
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: media-activities
-  namespace: warmth
-spec:
-  accessModes: ["ReadWriteOnce"]
-  storageClassName: longhorn        # default 3 replicas across nodes (durability)
-  resources:
-    requests:
-      storage: 2Gi
----
+# Static media (activity card art: <id>.jpg / <id>.mp4). Files are BAKED into the
+# warmth-media image (built from api/public/activities via media/Dockerfile), so
+# each replica is fully self-contained — NO shared volume. Two replicas spread
+# across nodes give active-active HA: either pod/node can die and the other keeps
+# serving with zero gap. Reached at /images/activities/* via the API proxy
+# (MEDIA_UPSTREAM in k3s/30-api.yaml → this Service's ClusterIP).
+#
+# Add/replace clips: update files in api/public/activities → rebuild+push
+#   docker build -f media/Dockerfile -t ghcr.io/darkarchonful/warmth-media:vN api/public/activities
+#   docker push ...:vN  → bump image below → kubectl apply. Batch clips per build.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: warmth-media
   namespace: warmth
 spec:
-  replicas: 1                       # single active instance (like Postgres); RWO
-  strategy:
-    type: Recreate                  # RWO can't be multi-attached during a rollout
+  replicas: 2
   selector:
     matchLabels: { app: warmth-media }
   template:
     metadata:
       labels: { app: warmth-media }
     spec:
+      imagePullSecrets:
+        - name: ghcr-pull
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -39,24 +31,23 @@ spec:
                   - key: tier
                     operator: In
                     values: ["primary", "backup"]
+        # Spread the two replicas onto different nodes for real HA.
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels: { app: warmth-media }
+                topologyKey: kubernetes.io/hostname
       containers:
         - name: nginx
-          image: nginx:1.27-alpine
+          image: ghcr.io/darkarchonful/warmth-media:v1
           ports:
             - containerPort: 80
-          volumeMounts:
-            - name: media
-              mountPath: /usr/share/nginx/html/images/activities
           readinessProbe:
-            # nginx returns 403 for the directory (no index), which would fail an
-            # httpGet probe — so just check the port is accepting connections.
             tcpSocket: { port: 80 }
             initialDelaySeconds: 3
             periodSeconds: 10
-      volumes:
-        - name: media
-          persistentVolumeClaim:
-            claimName: media-activities
 ---
 apiVersion: v1
 kind: Service
