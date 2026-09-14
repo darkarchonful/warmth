@@ -48,7 +48,9 @@ spec:
             - name: media
               mountPath: /usr/share/nginx/html/images/activities
           readinessProbe:
-            httpGet: { path: /images/activities/, port: 80 }
+            # nginx returns 403 for the directory (no index), which would fail an
+            # httpGet probe — so just check the port is accepting connections.
+            tcpSocket: { port: 80 }
             initialDelaySeconds: 3
             periodSeconds: 10
       volumes:
