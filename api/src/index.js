@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const appleSignin = require('apple-signin-auth');
 const crypto = require('crypto');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 const { sendPush } = require('./push');
 
 const app = express();
@@ -21,7 +22,20 @@ app.use((req, res, next) => {
   if (!req.path.startsWith('/images/')) res.set('Cache-Control', 'no-store');
   next();
 });
+// Activity card art (images + looping videos) lives on the warmth-media pod
+// (Longhorn volume), NOT in this image. Proxy /images/activities there so new
+// clips added to the volume are served without rebuilding the API, and so every
+// edge that reaches the API serves identical media. MEDIA_UPSTREAM = the media
+// Service ClusterIP (pinned, since cluster DNS is unreliable for these pods).
+// Placed before express.json + the static fallback below so it intercepts first.
+app.use(createProxyMiddleware({
+  pathFilter: (pathname) => pathname.startsWith('/images/activities'),
+  target: process.env.MEDIA_UPSTREAM || 'http://10.43.244.213',
+  changeOrigin: false,
+}));
 app.use(express.json());
+// Fallback: baked copies, only reached if the media proxy above is somehow
+// bypassed. Kept harmless; slim from the image later.
 app.use('/images/activities', express.static(path.join(__dirname, '..', 'public', 'activities'), {
   maxAge: '30d', immutable: true,
 }));
