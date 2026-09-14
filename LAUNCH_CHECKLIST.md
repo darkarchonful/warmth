@@ -13,8 +13,9 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ✅ Enroll / activate the Apple Developer account — **Armenia Individual** (not IE), Team `6P6BXDX8K8`, active 2026-08-25
 - ✅ Create the App Store Connect **app record** — "Warmth: Ideas for Two", ascAppId `6808587453`, bundle `tech.dbtvault-solutions.warmth`
 - ✅ Generate fresh **signing credentials** on the Armenia team (dist cert + profile + APNs, stored on EAS) — TestFlight build **5** live + smoke-tested (launch, Apple/Google/email sign-in, data load all pass) 2026-09-07
-- ⬜ Sign the **Paid Applications Agreement** (required before any IAP works)
-- ⬜ Complete **banking + tax** info (W-8/tax forms) — needed for paid/IAP
+- ✅ **Paid Applications Agreement signed** (2026-09-09) — active.
+- ✅ **Banking + tax DONE** (2026-09-09): bank = **Ardshinbank USD** (individual account, name Aleksei Nesterov), payout currency USD, status **Active**. Tax forms **W-8BEN + U.S. Certificate of Foreign Status both Active** (Part II treaty claim left blank — no US withholding on non-US app sales anyway; citizenship line was locked to Armenia by Apple = account country, non-editable, negligible effect). DSA = **non-trader (no EU distribution)** to keep personal address/phone private — revisit when monetizing.
+- ✅ **Apple Small Business Program — enrollment SUBMITTED** (2026-09-09; approval email pending, 15% rate effective 1st of next month). Answered No to all four association questions (standalone individual account; UK rig doesn't count — Admin-only, not owned/controlled). **Apple monetization setup now fully complete** — premium waits only on app-side StoreKit code (RevenueCat) later.
 
 ## 2. App Store Connect listing  — ALL ENTERED INTO ASC 2026-09-07
 - ✅ **Listing copy** — name "Warmth: Ideas for Two", subtitle, description, keywords, categories (Lifestyle / Social Networking) entered in ASC. Source `docs/APP_STORE_LISTING.md`

@@ -7,6 +7,7 @@ import { api, API_URL } from '../lib/api';
 import Paywall from '../components/Paywall';
 import { markReady } from '../lib/deeplink';
 import CoachCard from '../components/CoachCard';
+import DriftImage from '../components/DriftImage';
 
 function resolveImage(url) {
   if (!url) return null;
@@ -614,11 +615,11 @@ export default function Swipe() {
                 onPress={() => setViewerOpen(true)}
                 style={styles.cardImage}
               >
-                <Animated.Image
+                <DriftImage
                   key={activity.id}
                   source={{ uri: resolveImage(activity.image_url) }}
-                  style={[StyleSheet.absoluteFill, { opacity: revealOpacity }]}
-                  resizeMode="cover"
+                  style={StyleSheet.absoluteFill}
+                  imageStyle={{ opacity: revealOpacity }}
                 />
               </TouchableOpacity>
             ) : (

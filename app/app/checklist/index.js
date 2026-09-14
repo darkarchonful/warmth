@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Alert, Image } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSequence, runOnJS, Easing } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, API_URL } from '../../lib/api';
@@ -54,6 +55,39 @@ export default function Checklist() {
       if (e.premiumRequired) { setShowPaywall(true); return; }
       Alert.alert('Could not complete', e.message);
     }
+  }
+
+  // Gentle "We did it!" celebration: the card lifts, a soft glow blooms, and a
+  // 💛 rises and fades — then the real completion fires. Uses reanimated (which
+  // is already in the native build, so this ships as an OTA update).
+  const [celebratingId, setCelebratingId] = useState(null);
+  const celebrate = useSharedValue(0);
+  const cardScaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + celebrate.value * 0.03 }],
+  }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: celebrate.value * 0.2 }));
+  const heartStyle = useAnimatedStyle(() => ({
+    opacity: celebrate.value,
+    transform: [
+      { translateY: -celebrate.value * 46 },
+      { scale: 0.7 + celebrate.value * 0.6 },
+    ],
+  }));
+
+  function finishCelebrate(id) {
+    setCelebratingId(null);
+    handleComplete(id);
+  }
+
+  function playCelebrate(id) {
+    setCelebratingId(id);
+    celebrate.value = 0;
+    celebrate.value = withSequence(
+      withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) }),
+      withTiming(0, { duration: 260 }, (finished) => {
+        if (finished) runOnJS(finishCelebrate)(id);
+      })
+    );
   }
 
   function openAdder(parentId) {
@@ -136,7 +170,9 @@ export default function Checklist() {
       </Text>
     );
 
+    const isCelebrating = celebratingId === item.id;
     return (
+      <Animated.View style={[styles.cardWrap, isCelebrating && cardScaleStyle]}>
       <TouchableOpacity
         activeOpacity={0.85}
         onPress={() => router.push(`/checklist/${item.id}`)}
@@ -180,7 +216,7 @@ export default function Checklist() {
           <>
             {stateRow(item.you_completed, item.partner_completed)}
             {!item.you_completed && (
-              <TouchableOpacity style={[styles.actionBtn, styles.completeBtn]} onPress={() => handleComplete(item.id)}>
+              <TouchableOpacity style={[styles.actionBtn, styles.completeBtn]} onPress={() => playCelebrate(item.id)}>
                 <Text style={styles.actionText}>We did it!</Text>
               </TouchableOpacity>
             )}
@@ -234,6 +270,13 @@ export default function Checklist() {
           </View>
         )}
       </TouchableOpacity>
+      {isCelebrating && (
+        <>
+          <Animated.View pointerEvents="none" style={[styles.celebrateGlow, glowStyle]} />
+          <Animated.Text pointerEvents="none" style={[styles.celebrateHeart, heartStyle]}>💛</Animated.Text>
+        </>
+      )}
+      </Animated.View>
     );
   }
 
@@ -312,6 +355,24 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '300',
     textAlign: 'center',
+  },
+  cardWrap: { position: 'relative' },
+  celebrateGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 12,
+    borderRadius: 16,
+    backgroundColor: colors.success,
+  },
+  celebrateHeart: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '40%',
+    textAlign: 'center',
+    fontSize: 44,
   },
   item: {
     backgroundColor: colors.card,
