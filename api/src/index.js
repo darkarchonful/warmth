@@ -1171,7 +1171,7 @@ app.get('/checklist', auth, async (req, res) => {
   const isA = user_a_id === req.user.id;
 
   const items = await pool.query(
-    `SELECT cl.*, a.title, a.tagline, a.image_url, a.is_journey, c.name as category_name
+    `SELECT cl.*, a.title, a.tagline, a.image_url, a.video_url, a.is_journey, c.name as category_name
      FROM checklist cl
      JOIN activities a ON a.id = cl.activity_id
      JOIN categories c ON c.id = a.category_id

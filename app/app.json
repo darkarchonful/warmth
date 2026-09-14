@@ -49,6 +49,7 @@
       "expo-web-browser",
       "expo-notifications",
       "expo-apple-authentication",
+      "expo-video",
       [
         "expo-image-picker",
         {

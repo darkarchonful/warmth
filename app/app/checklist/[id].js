@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '../../lib/colors';
 import { api, API_URL } from '../../lib/api';
 import CommentThread from '../../components/CommentThread';
+import PlanMedia from '../../components/PlanMedia';
 
-function resolveImage(url) {
+function resolveMedia(url) {
   if (!url) return null;
   return url.startsWith('http') ? url : `${API_URL}${url}`;
 }
@@ -72,15 +73,17 @@ export default function PlanDetail() {
         <View style={{ flex: 1 }} />
       </View>
 
-      <View style={styles.headerCard}>
-        {item.image_url && (
-          <Image source={{ uri: resolveImage(item.image_url) }} style={styles.image} resizeMode="cover" />
-        )}
-        <View style={styles.meta}>
-          <Text style={styles.category}>{item.category_name}  ·  {statusLabel}</Text>
-          <Text style={styles.title}>{item.title}</Text>
-          <Text style={styles.tagline} numberOfLines={1}>{item.tagline}</Text>
-        </View>
+      <View style={styles.hero}>
+        <PlanMedia
+          videoUrl={resolveMedia(item.video_url)}
+          imageUrl={resolveMedia(item.image_url)}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
+      <View style={styles.metaBlock}>
+        <Text style={styles.category}>{item.category_name}  ·  {statusLabel}</Text>
+        <Text style={styles.title}>{item.title}</Text>
+        <Text style={styles.tagline} numberOfLines={1}>{item.tagline}</Text>
       </View>
 
       <View style={styles.divider} />
@@ -103,9 +106,14 @@ const styles = StyleSheet.create({
   },
   back: { color: colors.accent, fontSize: 15, fontWeight: '500' },
   headerTitle: { flex: 2, fontSize: 18, color: colors.text, fontWeight: '300', textAlign: 'center' },
-  headerCard: { flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 12 },
-  image: { width: 80, height: 80, borderRadius: 12, backgroundColor: colors.warm, marginRight: 14 },
-  meta: { flex: 1, justifyContent: 'center' },
+  hero: {
+    marginHorizontal: 20,
+    height: 200,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: colors.warm,
+  },
+  metaBlock: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12 },
   category: { fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 6 },
   title: { fontSize: 22, color: colors.text, fontWeight: '500', marginBottom: 6 },
   tagline: { fontSize: 14, color: colors.textLight, marginBottom: 10 },
