@@ -8,6 +8,7 @@ import { colors } from '../../lib/colors';
 import { api, imageSource } from '../../lib/api';
 import CommentThread from '../../components/CommentThread';
 import DriftImage from '../../components/DriftImage';
+import PlanMedia from '../../components/PlanMedia';
 
 const SCREEN_W = Dimensions.get('window').width;
 
@@ -227,7 +228,7 @@ export default function MemoryDetail() {
   const canAdd = youCount < 2;
   const cards = photos.length
     ? photos.map(p => ({ id: p.id, url: p.url, label: p.mine ? 'You' : partner, mine: p.mine }))
-    : (item.image_url ? [{ id: null, url: item.image_url, label: '', mine: false }] : []);
+    : (item.image_url ? [{ id: null, url: item.image_url, video: item.video_url || null, label: '', mine: false }] : []);
 
   function openGallery(i) {
     dragY.setValue(0);
@@ -244,7 +245,9 @@ export default function MemoryDetail() {
               <View key={c.id != null ? `p${c.id}` : `art${i}`} style={styles.photoCardWrap}>
                 <TouchableOpacity activeOpacity={0.85} onPress={() => openGallery(i)}>
                   <View style={[styles.photoCard, { overflow: 'hidden' }]}>
-                    <DriftImage source={imageSource(c.url)} style={StyleSheet.absoluteFill} />
+                    {c.video
+                      ? <PlanMedia videoUrl={imageSource(c.video)?.uri} imageUrl={imageSource(c.url)?.uri} style={StyleSheet.absoluteFill} />
+                      : <DriftImage source={imageSource(c.url)} style={StyleSheet.absoluteFill} />}
                   </View>
                   {c.label ? <Text style={styles.photoCardLabel}>{c.label}</Text> : null}
                 </TouchableOpacity>
