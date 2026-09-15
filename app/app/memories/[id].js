@@ -239,7 +239,17 @@ export default function MemoryDetail() {
   const headerContent = (
     <View>
       <View style={styles.headerCard}>
-        {cards.length > 0 && (
+        {cards.length > 0 && photos.length === 0 && (
+          // Art fallback (no couple photo yet): a full-width hero like the plan
+          // page, not a thumbnail in the strip. Video if the activity has a clip,
+          // else the drifting still.
+          <TouchableOpacity activeOpacity={0.85} onPress={() => openGallery(0)}>
+            <View style={styles.artHero}>
+              <PlanMedia videoUrl={imageSource(cards[0].video)?.uri} imageUrl={imageSource(cards[0].url)?.uri} style={StyleSheet.absoluteFill} />
+            </View>
+          </TouchableOpacity>
+        )}
+        {cards.length > 0 && photos.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoStrip}>
             {cards.map((c, i) => (
               <View key={c.id != null ? `p${c.id}` : `art${i}`} style={styles.photoCardWrap}>
@@ -432,6 +442,7 @@ const styles = StyleSheet.create({
   back: { color: colors.accent, fontSize: 15, fontWeight: '500' },
   headerTitle: { flex: 2, fontSize: 18, color: colors.text, fontWeight: '300', textAlign: 'center' },
   headerCard: { paddingHorizontal: 20, paddingBottom: 12 },
+  artHero: { width: '100%', height: 200, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.warm },
   photoStrip: { flexDirection: 'row', gap: 10, marginBottom: 12, paddingRight: 20 },
   photoCardWrap: { width: 150 },
   photoCard: { width: 150, height: 190, borderRadius: 14, backgroundColor: colors.warm },
