@@ -41,7 +41,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: nginx
-          image: ghcr.io/darkarchonful/warmth-media:v1
+          image: ghcr.io/darkarchonful/warmth-media:v2
           ports:
             - containerPort: 80
           readinessProbe:
