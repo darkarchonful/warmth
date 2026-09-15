@@ -1467,9 +1467,12 @@ app.get('/memories', auth, async (req, res) => {
     `SELECT m.id, m.couple_id, m.checklist_id, m.completed_at, m.updated_at,
             m.activity_title AS title, m.activity_tagline AS tagline,
             m.activity_image_url AS image_url, m.activity_category AS category_name,
+            a.video_url,
             m.rating_a, m.rating_b, m.mood_a, m.mood_b, m.note_a, m.note_b,
             m.repeat_requested_by, m.repeat_requested_at, m.journey_steps
      FROM memories m
+     -- live join (not a snapshot) so a clip added after completion still shows
+     LEFT JOIN activities a ON a.id = m.activity_id
      WHERE m.couple_id = $1
      ORDER BY date_trunc('month', m.completed_at) DESC,
               COALESCE(m.sort_rank, extract(epoch FROM m.completed_at)) DESC`,
@@ -1505,7 +1508,7 @@ app.get('/memories', auth, async (req, res) => {
     photos,
     photo_url: photos[0] ? photos[0].url : null,
     completed_at: r.completed_at, updated_at: r.updated_at,
-    title: r.title, tagline: r.tagline, image_url: r.image_url, category_name: r.category_name,
+    title: r.title, tagline: r.tagline, image_url: r.image_url, video_url: r.video_url, category_name: r.category_name,
     journey_steps: r.journey_steps,
     you_rating: isA ? r.rating_a : r.rating_b,
     partner_rating: isA ? r.rating_b : r.rating_a,
