@@ -1,6 +1,6 @@
 # Warmth — Card Image TODO (current missing set)
 
-**105 cards still need Midjourney art** — synced to the live DB 2026-09-14 (exactly the activities where image_url IS NULL). Prompts rewritten 2026-09-11 for variety — each scene has its own setting, camera angle and light so the cards stop looking alike. Includes the 5 new activities added 2026-09-14 (ids 256–260). Done + removed from this list: 96, 99, 243, 101, 102, 103, 104, 178, 182, 219, 260.
+**104 cards still need Midjourney art** — synced to the live DB 2026-09-14 (exactly the activities where image_url IS NULL). Prompts rewritten 2026-09-11 for variety — each scene has its own setting, camera angle and light so the cards stop looking alike. Includes the 5 new activities added 2026-09-14 (ids 256–260). Done + removed from this list: 96, 99, 243, 101, 102, 103, 104, 178, 182, 219, 260, 105.
 
 ## How to use
 1. Append your original **`--sref <code>`** (+ `--v 6`) to every prompt so new cards share the palette/finish of the existing set.
@@ -19,10 +19,9 @@ Every old prompt was `<5-word scene> + <30 words of identical boilerplate>`, so 
 
 ---
 
-## Creative  (15)
+## Creative  (14)
 **98.jpg** — Make pasta from scratch — close-up of four floury hands stretching a sheet of fresh pasta over a wooden board, flour dust in the air, a rolling pin and egg yolks nearby, sunlit kitchen counter, shot from above, faces out of frame, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **100.jpg** — Learn calligraphy basics — extreme close-up of one hand guiding another that holds a dip pen mid-stroke on cream paper, a bottle of black ink and practice sheets, warm desk-lamp pool, shallow focus, no faces, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
-**105.jpg** — Write a joint bucket list — a couple lying on their stomachs on a rug seen from behind, writing on a big sheet of paper with markers, a mug of tea beside them, soft window light, backs to camera, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **153.jpg** — Gingerbread house together — close-up of hands piping white icing onto a gingerbread house, candy decorations and a piping bag, a flour-dusted table, warm kitchen glow at night, overhead angle, faces out of frame, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **179.jpg** — Pick the song — close-up of two hands scrolling a phone music app together on a couch, vinyl records and a turntable nearby, warm evening lamp, shallow focus on the screen glow, no faces, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
 **180.jpg** — Practice one minute before dinner — a couple doing a quick dance turn in the kitchen while a pot simmers, seen from behind, apron strings and rising steam, golden-hour light through the window, candid mid-motion, faces unseen, muted warm cinematic palette, soft painterly photo-illustration, fine film grain --ar 1:1 --style raw
