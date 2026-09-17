@@ -150,14 +150,23 @@ async function onARoll() {
 
 // ---------------------------------------------------------------------------
 // B4 — Asymmetry nudge. One partner swiped within 2 days, the other hasn't in
-// 5+ days; nudge only the silent one, at their local 18:00. Capped to once per
-// 4 days so it never turns into nagging.
+// 3+ days (was 5 — tightened 2026-09-17 to catch people before the habit
+// breaks); nudge only the silent one, at their local 18:00. Capped to once per
+// 4 days so it never turns into nagging. The copy names how many ideas the
+// partner liked that the silent one hasn't swiped yet (= potential matches in
+// this couple) — a concrete number + the match hook pulls better than a generic
+// "jump back in". Falls back to the generic line when that count is 0.
 // ---------------------------------------------------------------------------
 async function asymmetryNudge() {
   const { rows } = await pool.query(`
     SELECT silent.id AS user_id,
            partner.name AS partner_name,
-           (now() AT TIME ZONE silent.timezone)::date::text AS localdate
+           (now() AT TIME ZONE silent.timezone)::date::text AS localdate,
+           (SELECT count(*) FROM swipes ps
+             WHERE ps.user_id = partner.id AND ps.couple_id = c.id AND ps.liked
+               AND NOT EXISTS (SELECT 1 FROM swipes ss
+                                WHERE ss.user_id = silent.id AND ss.couple_id = c.id
+                                  AND ss.activity_id = ps.activity_id))::int AS waiting_likes
     FROM couples c
     JOIN users silent  ON silent.id  IN (c.user_a_id, c.user_b_id)
     JOIN users partner ON partner.id IN (c.user_a_id, c.user_b_id) AND partner.id <> silent.id
@@ -166,16 +175,19 @@ async function asymmetryNudge() {
       AND EXISTS (SELECT 1 FROM push_tokens pt WHERE pt.user_id = silent.id)
       AND EXTRACT(HOUR FROM (now() AT TIME ZONE silent.timezone)) = 18
       AND EXISTS     (SELECT 1 FROM swipes s WHERE s.user_id = partner.id AND s.swiped_at > now() - interval '2 days')
-      AND NOT EXISTS (SELECT 1 FROM swipes s WHERE s.user_id = silent.id  AND s.swiped_at > now() - interval '5 days')
+      AND NOT EXISTS (SELECT 1 FROM swipes s WHERE s.user_id = silent.id  AND s.swiped_at > now() - interval '3 days')
   `);
   let sent = 0;
   for (const r of rows) {
     const who = r.partner_name || 'Your partner';
+    const n = r.waiting_likes || 0;
     if (await dispatch({
       userId: r.user_id, type: 'asymmetry', dedupKey: `asymmetry:${r.localdate}`,
       capInterval: '4 days',
-      title: `${who} is planning dates 💛`,
-      body: 'Jump back in?',
+      title: n > 0
+        ? `${who} liked ${n} idea${n === 1 ? '' : 's'} 💛`
+        : `${who} is planning dates 💛`,
+      body: n > 0 ? 'Swipe to see if you match' : 'Jump back in?',
       data: { route: '/swipe' },
     })) sent++;
   }
@@ -304,9 +316,67 @@ async function matchedApproveNudge() {
   return { rule: 'D2 matched_approve', candidates: rows.length, sent };
 }
 
+// ---------------------------------------------------------------------------
+// Timezone hygiene. Every rule does `now() AT TIME ZONE u.timezone`, and ONE
+// user with a name this Postgres doesn't know makes the whole query throw — so
+// the rule sends to nobody. That happened 2026-09-17: the App Review account
+// reported "US/Pacific" (a legacy alias) and C2/B4/D2 died for every user. The
+// DB image ships tzdata without the "backward" aliases, and iOS still reports
+// several of them (Europe/Kiev, Asia/Calcutta, US/*).
+// Before the rules run, rewrite any unknown users.timezone to a name Postgres
+// knows: explicit alias map -> Node's Intl canonical name -> NULL (NULL = user
+// is skipped, the documented behaviour for "no timezone yet"). The API may write
+// the raw header value back on the user's next request; the next hourly run
+// simply normalises it again.
+// TODO: port this normalisation to the API's X-Timezone write path.
+// ---------------------------------------------------------------------------
+const TZ_ALIASES = {
+  'US/Pacific': 'America/Los_Angeles', 'US/Mountain': 'America/Denver',
+  'US/Central': 'America/Chicago', 'US/Eastern': 'America/New_York',
+  'US/Arizona': 'America/Phoenix', 'US/Alaska': 'America/Anchorage',
+  'US/Hawaii': 'Pacific/Honolulu', 'Canada/Pacific': 'America/Vancouver',
+  'Canada/Eastern': 'America/Toronto', 'Europe/Kiev': 'Europe/Kyiv',
+  'Asia/Calcutta': 'Asia/Kolkata', 'Asia/Saigon': 'Asia/Ho_Chi_Minh',
+  'Asia/Katmandu': 'Asia/Kathmandu', 'Asia/Rangoon': 'Asia/Yangon',
+  'Asia/Dacca': 'Asia/Dhaka', 'Asia/Istanbul': 'Europe/Istanbul',
+  'America/Buenos_Aires': 'America/Argentina/Buenos_Aires',
+  'America/Godthab': 'America/Nuuk', 'Atlantic/Faeroe': 'Atlantic/Faroe',
+  'Australia/ACT': 'Australia/Sydney', 'Australia/NSW': 'Australia/Sydney',
+  'GB': 'Europe/London', 'Eire': 'Europe/Dublin', 'Israel': 'Asia/Jerusalem',
+  'Japan': 'Asia/Tokyo', 'Singapore': 'Asia/Singapore', 'Turkey': 'Europe/Istanbul',
+};
+async function normalizeTimezones() {
+  const { rows } = await pool.query(`
+    SELECT DISTINCT u.timezone FROM users u
+    WHERE u.timezone IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM pg_timezone_names t WHERE t.name = u.timezone)`);
+  const fixed = [];
+  for (const { timezone: raw } of rows) {
+    const candidates = [TZ_ALIASES[raw]];
+    try {
+      candidates.push(new Intl.DateTimeFormat('en-US', { timeZone: raw }).resolvedOptions().timeZone);
+    } catch (_) { /* not a zone Node knows either */ }
+    let target = null;
+    for (const c of candidates) {
+      if (!c || c === raw) continue;
+      const ok = await pool.query('SELECT 1 FROM pg_timezone_names WHERE name = $1', [c]);
+      if (ok.rows.length) { target = c; break; }
+    }
+    await pool.query('UPDATE users SET timezone = $1 WHERE timezone = $2', [target, raw]);
+    fixed.push(`${raw}->${target || 'NULL'}`);
+  }
+  return { rule: 'tz_normalize', fixed };
+}
+
 async function main() {
   const started = new Date().toISOString();
   const results = [];
+  try {
+    results.push(await normalizeTimezones());
+  } catch (e) {
+    console.error('[scheduler] normalizeTimezones threw:', e.message);
+    results.push({ rule: 'tz_normalize', error: e.message });
+  }
   for (const rule of [weekendPrompt, onARoll, asymmetryNudge, stalePlanNudge, matchedApproveNudge]) {
     try {
       results.push(await rule());
