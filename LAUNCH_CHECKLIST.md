@@ -61,8 +61,8 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 
 ## 8. Pre-submit final checks
 - ✅ Fresh production build on the Armenia team — **build 5** (1.0, runtime `4beb720e`), channel `production`, on TestFlight
-- ⏳ Smoke test on a clean device — ✅ launch + Apple/Google/email sign-in + data load pass; register→pair→plan→nudge not fully re-run (premium N/A, free-first)
-- ⬜ **Confirm push notifications deliver on the release build (build 5)** — NOT yet verified
+- ✅ **Smoke test 2026-09-17** — email login → pair by invite → 2 matches → comments both ways → approve → complete → memory → photo → unpair (shared data wiped). All passed. Findings: login email landed in Gmail Spam on first contact (SPF/DKIM OK, DMARC p=none inherited); plan comments are left orphaned in `comments` after unpair.
+- ✅ **Push notifications verified 2026-09-17** on the owner's phone with the app closed: "Paired!", "You matched!" (tap opens Plans), comment push (tap opens the plan), approval + completion pushes. Partner side driven through the API.
 - ⬜ Submit for review with demo account + notes — reached the **«Отправить на проверку»** button (all required fields validated); holding on the emoji/card-images blocker (§6)
 
 ---
