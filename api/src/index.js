@@ -80,14 +80,14 @@ const MAIL_FROM = process.env.MAIL_FROM || 'Warmth <noreply@warmth.dbtvault-solu
 // Send one transactional email via Resend. Resolves on success; throws on any
 // non-2xx so the caller can surface a 502. Callers must check RESEND_API_KEY
 // first (no key -> 503 "unavailable", not a failed send).
-async function sendEmail({ to, subject, text }) {
+async function sendEmail({ to, subject, text, html }) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: MAIL_FROM, to, subject, text }),
+    body: JSON.stringify({ from: MAIL_FROM, to, subject, text, ...(html ? { html } : {}) }),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
@@ -427,7 +427,18 @@ app.post('/auth/email/request', async (req, res) => {
     await sendEmail({
       to: email,
       subject: `${code} is your Warmth code`,
-      text: `Your Warmth login code is ${code}\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.`,
+      text: `Your Warmth login code is ${code}\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.\n\nWarmth — ideas for two\nhttps://dbtvault-solutions.tech/warmth/support/`,
+      // A multipart (text + HTML) message with a real footer scores better with
+      // spam filters than a two-line plain-text mail (first login email to a new
+      // inbox landed in Gmail Spam, 2026-09-17).
+      html: `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:440px;margin:0 auto;padding:32px 24px;color:#3d2c29">
+  <h1 style="font-size:20px;margin:0 0 16px">Your Warmth login code</h1>
+  <p style="font-size:15px;line-height:22px;margin:0 0 20px">Enter this code in the app to sign in:</p>
+  <p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:0 0 20px">${code}</p>
+  <p style="font-size:14px;line-height:20px;color:#6b5a55;margin:0 0 28px">It expires in 10 minutes. If you didn't request this, you can safely ignore this email.</p>
+  <hr style="border:none;border-top:1px solid #eadfd8;margin:0 0 16px">
+  <p style="font-size:12px;line-height:18px;color:#9a8a84;margin:0">Warmth — ideas for two · <a href="https://dbtvault-solutions.tech/warmth/support/" style="color:#9a8a84">Support</a> · <a href="https://dbtvault-solutions.tech/warmth/privacy/" style="color:#9a8a84">Privacy</a></p>
+</div>`,
     });
   } catch (e) {
     console.error('[email-login] send failed:', e.message);
