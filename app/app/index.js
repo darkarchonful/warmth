@@ -324,7 +324,10 @@ export default function Home() {
                 >
                   <Text style={styles.buttonText}>{emailBusy ? 'Verifying…' : 'Verify'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={{ marginTop: 18 }} onPress={requestEmailCode} disabled={emailBusy}>
+                <Text style={styles.spamHint}>
+                  Can't find it? Check your Spam or Promotions folder — the email comes from Warmth.
+                </Text>
+                <TouchableOpacity style={{ marginTop: 14 }} onPress={requestEmailCode} disabled={emailBusy}>
                   <Text style={styles.cancelLine}>Resend code</Text>
                 </TouchableOpacity>
               </>
@@ -576,6 +579,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
     fontStyle: 'italic',
+  },
+  spamHint: {
+    marginTop: 18,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textLight,
+    textAlign: 'center',
+    paddingHorizontal: 24,
   },
   cancelLine: {
     fontSize: 13,
