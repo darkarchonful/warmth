@@ -43,12 +43,12 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 
 ## 5. App Review prep  (common rejection points)
 - ✅ **Demo account + pre-paired partner** — `appreview@warmth.dbtvault-solutions.tech` / code `473829`, pre-paired with "Sam", seeded with 2 plans + 1 memory + a comment. Login bypass env-gated (API v30). Verified end-to-end.
-- ⬜ No placeholder content at review time (ties to §6 card images)
+- ✅ No placeholder content at review time — all deck cards have art (2026-09-17)
 - ✅ **Review notes** — `docs/APP_REVIEW_NOTES.md` (paste into ASC App Review Information)
 - ✅ **Re-pair cooldown disabled for review** — 48h same-couple cooldown gated behind `REPAIR_COOLDOWN_HOURS` (default 0); reviewer can pair→unpair→re-pair freely. Restore to `48` post-launch (see §7).
 
 ## 6. App polish / content
-- ⬜ **Real card images** to replace emoji placeholders (flagged as pre-launch must)
+- ✅ **Real card images** — DONE 2026-09-17: all 222 deck cards have art (media image v7); 5 cards that never got good art were removed from the deck
 - ⬜ Final copy pass on cards / onboarding
 
 ## 7. Backend / infra hardening (from prod-gaps)
