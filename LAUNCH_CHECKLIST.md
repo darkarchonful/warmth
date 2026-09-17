@@ -63,7 +63,7 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ✅ Production build on the Armenia team — **build 6** (1.0.0, runtime `eca14527`, includes expo-video), channel `production`, on TestFlight since 2026-09-14. **Submit build 6, not build 5.** All later JS changes ship over the air on the same runtime (latest OTA 2026-09-17); verified 2026-09-17 that build runtime == OTA runtime, so no new build is needed.
 - ✅ **Smoke test 2026-09-17** — email login → pair by invite → 2 matches → comments both ways → approve → complete → memory → photo → unpair (shared data wiped). All passed. Findings: login email landed in Gmail Spam on first contact (SPF/DKIM OK, DMARC p=none inherited); plan comments are left orphaned in `comments` after unpair.
 - ✅ **Push notifications verified 2026-09-17** on the owner's phone with the app closed: "Paired!", "You matched!" (tap opens Plans), comment push (tap opens the plan), approval + completion pushes. Partner side driven through the API.
-- ⬜ Submit for review with demo account + notes — reached the **«Отправить на проверку»** button (all required fields validated); holding on the emoji/card-images blocker (§6)
+- ✅ **SUBMITTED FOR REVIEW 2026-09-17** — version 1.0.0, build 6, demo account + review notes attached. While "Waiting for Review / In Review": do not touch the demo accounts (`appreview@…`, `appreview.partner@…`) or their data, keep `DEMO_EMAIL`/`DEMO_CODE` and `REPAIR_COOLDOWN_HOURS=0` in place, avoid risky API deploys and native changes, keep OTAs to fixes only.
 
 ---
 
