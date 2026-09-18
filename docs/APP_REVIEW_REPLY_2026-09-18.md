@@ -54,7 +54,7 @@ Content created in the app (custom activity ideas, comments, photos and notes) i
 - Reporting: Settings → "Report a problem or content" and "Contact support" reach us directly by email, and we respond to reports within 24 hours.
 - Account deletion: Settings → Delete account permanently removes the account and all associated data.
 
-Contact: darkarchonful@gmail.com
+Contact: warmth@dbtvault-solutions.tech
 
 ---
 

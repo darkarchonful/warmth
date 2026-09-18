@@ -46,7 +46,7 @@ No purchases are required to review the app. There is no user-generated public
 content and no ads or third-party tracking.
 
 ## Contact
-Developer contact: darkarchonful@gmail.com
+Developer contact: warmth@dbtvault-solutions.tech
 
 ---
 

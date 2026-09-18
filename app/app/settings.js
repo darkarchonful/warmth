@@ -17,7 +17,7 @@ import { colors } from '../lib/colors';
 
 // Support / legal destinations. Env-overridable (never hardcode config), with the
 // canonical public pages as defaults.
-const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'darkarchonful@gmail.com';
+const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'warmth@dbtvault-solutions.tech';
 const SUPPORT_URL = process.env.EXPO_PUBLIC_SUPPORT_URL || 'https://dbtvault-solutions.tech/warmth/support/';
 const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://dbtvault-solutions.tech/warmth/privacy/';
 
