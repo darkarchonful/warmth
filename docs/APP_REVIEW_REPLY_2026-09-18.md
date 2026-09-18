@@ -51,7 +51,7 @@ Not applicable. The app does not operate in a regulated industry. All activity i
 **User-generated content**
 Content created in the app (custom activity ideas, comments, photos and notes) is visible only to the two partners of one couple. There is no public feed, no search, and no way to contact or see any other user. Because of this private one-to-one design:
 - Blocking: "Unpair" in Settings immediately ends the connection, removes the partner's access and deletes all shared content. A person can only be paired by entering an invite code themselves.
-- Reporting: Settings → "Report a problem or content" and "Contact support" reach us directly by email, and we respond to reports within 24 hours.
+- Reporting: Settings → "Report a problem or content" and "Contact support" show our support address and open an email to us or our support page. We respond to reports within 24 hours.
 - Account deletion: Settings → Delete account permanently removes the account and all associated data.
 
 Contact: warmth@dbtvault-solutions.tech
@@ -75,7 +75,7 @@ Apple's rules for the recording: **physical iPhone**, **latest iOS** (update the
 3. Deck: swipe left once, right twice; tap a card to show its detail.
 4. Plans: open "Cook dinner together" → show the comment thread → type and send one short comment.
 5. Memories: open the memory → show ratings/notes → add a photo from the library.
-6. Settings: scroll slowly top to bottom so Name, Pairing/Unpair, Help (Contact support, Report a problem or content, Privacy policy), Log out and Delete account are all visible. Tap Unpair, show the confirmation, tap **Cancel**.
+6. Settings: scroll slowly top to bottom so Name, Pairing/Unpair, Help (Contact support, Report a problem or content, Privacy policy), Log out and Delete account are all visible. Tap **Report a problem or content**: a dialog shows the support address — pause a second, then tap **Open support page** (or Cancel) and return to the app. Do NOT tap "Open mail app" on a phone without a configured mail app (iOS may open an unrelated app). Then tap Unpair, show the confirmation, tap **Cancel**.
 7. Log out (confirm).
 8. Registration: Email → your throwaway address → switch to Mail, read the code, switch back, enter it → complete the name/intro screens → the pairing screen with "Share this code" appears. Pause there a moment (it shows how partners connect).
 9. Settings → **Delete account** → confirm → the app returns to the welcome screen. Stop recording.
