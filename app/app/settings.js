@@ -8,11 +8,18 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Application from 'expo-application';
 import { api, clearToken } from '../lib/api';
 import { colors } from '../lib/colors';
+
+// Support / legal destinations. Env-overridable (never hardcode config), with the
+// canonical public pages as defaults.
+const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'darkarchonful@gmail.com';
+const SUPPORT_URL = process.env.EXPO_PUBLIC_SUPPORT_URL || 'https://dbtvault-solutions.tech/warmth/support/';
+const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://dbtvault-solutions.tech/warmth/privacy/';
 
 export default function Settings() {
   const router = useRouter();
@@ -136,6 +143,28 @@ export default function Settings() {
               sub="Permanently removes your account and all data"
               onPress={() => setConfirm('delete')}
               danger
+              disabled={working}
+              last
+            />
+          </View>
+
+          <Text style={styles.sectionLabel}>Help</Text>
+          <View style={styles.card}>
+            <Action
+              label="Contact support"
+              sub="Questions, feedback, or trouble signing in"
+              onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Warmth support')}`).catch(() => Linking.openURL(SUPPORT_URL))}
+              disabled={working}
+            />
+            <Action
+              label="Report a problem or content"
+              sub="Tell us about anything inappropriate. Unpairing removes your partner's access and all shared content right away."
+              onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Warmth report')}`).catch(() => Linking.openURL(SUPPORT_URL))}
+              disabled={working}
+            />
+            <Action
+              label="Privacy policy"
+              onPress={() => Linking.openURL(PRIVACY_URL)}
               disabled={working}
               last
             />
