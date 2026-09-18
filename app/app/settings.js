@@ -21,6 +21,27 @@ const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'warmth@dbtvault-
 const SUPPORT_URL = process.env.EXPO_PUBLIC_SUPPORT_URL || 'https://dbtvault-solutions.tech/warmth/support/';
 const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://dbtvault-solutions.tech/warmth/privacy/';
 
+// Don't fire a bare mailto: link. On a phone with no mail app configured iOS hands
+// mailto: to whatever app claims it (seen: a taxi app opened instead). Show the
+// address first and let the user pick the mail app or the support web page, so the
+// contact path always works and the address is visible either way.
+function openContact(title, subject) {
+  Alert.alert(
+    title,
+    `Write to us at ${SUPPORT_EMAIL}. We reply within 24 hours.`,
+    [
+      {
+        text: 'Open mail app',
+        onPress: () =>
+          Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`)
+            .catch(() => Linking.openURL(SUPPORT_URL)),
+      },
+      { text: 'Open support page', onPress: () => Linking.openURL(SUPPORT_URL) },
+      { text: 'Cancel', style: 'cancel' },
+    ],
+  );
+}
+
 export default function Settings() {
   const router = useRouter();
   const [me, setMe] = useState(null);
@@ -153,13 +174,13 @@ export default function Settings() {
             <Action
               label="Contact support"
               sub="Questions, feedback, or trouble signing in"
-              onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Warmth support')}`).catch(() => Linking.openURL(SUPPORT_URL))}
+              onPress={() => openContact('Contact support', 'Warmth support')}
               disabled={working}
             />
             <Action
               label="Report a problem or content"
               sub="Tell us about anything inappropriate. Unpairing removes your partner's access and all shared content right away."
-              onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Warmth report')}`).catch(() => Linking.openURL(SUPPORT_URL))}
+              onPress={() => openContact('Report a problem or content', 'Warmth report')}
               disabled={working}
             />
             <Action
