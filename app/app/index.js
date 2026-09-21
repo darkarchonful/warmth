@@ -15,6 +15,16 @@ import Toast from '../components/Toast';
 // then the share text is unchanged. Flipping it on is env + OTA, no native build.
 const INVITE_URL = process.env.EXPO_PUBLIC_INVITE_URL || '';
 
+// App Review demo accounts use a fixed login code and NO email is sent for them
+// (server: DEMO_EMAIL / DEMO_CODE). Reviewers were seen waiting for an email on
+// the code screen (2026-09-21), so tell them where the code is. The hint never
+// shows the code itself and only appears for addresses on our own review domain.
+const REVIEW_EMAIL_DOMAIN = process.env.EXPO_PUBLIC_REVIEW_EMAIL_DOMAIN || 'warmth.dbtvault-solutions.tech';
+function isReviewEmail(email) {
+  const e = (email || '').trim().toLowerCase();
+  return e.startsWith('appreview') && e.endsWith(`@${REVIEW_EMAIL_DOMAIN}`);
+}
+
 WebBrowser.maybeCompleteAuthSession();
 
 export default function Home() {
@@ -324,9 +334,15 @@ export default function Home() {
                 >
                   <Text style={styles.buttonText}>{emailBusy ? 'Verifying…' : 'Verify'}</Text>
                 </TouchableOpacity>
-                <Text style={styles.spamHint}>
-                  Can't find it? Check your Spam or Promotions folder — the email comes from Warmth.
-                </Text>
+                {isReviewEmail(emailInput) ? (
+                  <Text style={[styles.spamHint, { color: colors.accent, fontWeight: '600' }]}>
+                    App Review: no email is sent for this demo account. Enter the login code from the App Review notes — it is the value in the Password field.
+                  </Text>
+                ) : (
+                  <Text style={styles.spamHint}>
+                    Can't find it? Check your Spam or Promotions folder — the email comes from Warmth.
+                  </Text>
+                )}
                 <TouchableOpacity style={{ marginTop: 14 }} onPress={requestEmailCode} disabled={emailBusy}>
                   <Text style={styles.cancelLine}>Resend code</Text>
                 </TouchableOpacity>
