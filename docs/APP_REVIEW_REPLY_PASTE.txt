@@ -1,0 +1,41 @@
+Hello, thank you for the review. The requested information is below; a screen recording is attached to this reply.
+
+1. SCREEN RECORDING
+Recorded on a physical iPhone running the current iOS version, starting with app launch. It shows sign-in with the demo account, the swipe deck, a shared plan with its comment thread, a memory with a photo, Settings (support, report, unpair), log out, registration of a new account by email, and in-app account deletion.
+
+2. PURPOSE AND AUDIENCE
+Warmth is a private app for two people in a relationship. Couples fall into routine and struggle to agree on what to do together. Each partner privately swipes through date and activity ideas. Only when both like the same idea does it become a shared Plan, so nobody has to propose something and risk a no. Partners confirm the plan, do it, mark it done, and it becomes a Memory with optional photos and notes. Gentle reminders help them follow through. Audience: adult couples (rated 13+). It is not a social network and never connects strangers: each account links to exactly one partner through a private invite code.
+
+3. SETUP AND ACCESS
+On the welcome screen choose "Email".
+Email: appreview@warmth.dbtvault-solutions.tech
+Login code: 473829 (fixed code for review; no email is sent)
+This demo account is already paired and pre-loaded, so everything can be reviewed on one device:
+- Deck: swipe right to like an idea, left to pass.
+- Plans: one confirmed plan and one awaiting confirmation; open a plan to see the partner comment thread.
+- Memories: one completed activity with ratings and notes; photos can be added.
+- Settings (top of the deck): name, unpair, contact support, report a problem or content, privacy policy, log out, delete account.
+Optional partner account for a live match on a second device: appreview.partner@warmth.dbtvault-solutions.tech, code 473829. Like the same idea on both accounts and it becomes a shared Plan.
+In normal use one partner shares an invite code and the other enters it. Sign in with Apple and Google sign-in are also available. There are no purchases or paid features in this version.
+
+4. EXTERNAL SERVICES
+- Sign in with Apple, Google Sign-In: authentication only.
+- Resend: delivers the one-time login code email.
+- Apple Push Notification service via Expo push: e.g. "You matched", new partner comment.
+- Expo EAS Update: JavaScript bug-fix updates.
+- Our own backend: Node.js API and PostgreSQL on servers we operate; all user data is stored there.
+No analytics or advertising SDKs, no tracking, no payment processor, no AI services.
+
+5. REGIONAL DIFFERENCES
+None. The app works identically in every region, in English. Seasonal ideas are shown by calendar month, the same way for all users.
+
+6. REGULATED INDUSTRIES / THIRD-PARTY MATERIAL
+Not applicable. All activity ideas, texts and card illustrations were created by us for this app. No licensed or third-party content.
+
+USER-GENERATED CONTENT
+Custom ideas, comments, photos and notes are visible only to the two partners of one couple. There is no public feed, no search and no way to see or contact any other user.
+- Blocking: "Unpair" in Settings immediately ends the connection, removes the partner's access and deletes all shared content.
+- Reporting: Settings > "Report a problem or content" and "Contact support" show our support address and open an email or our support page. We respond within 24 hours.
+- Account deletion: Settings > Delete account permanently removes the account and all data. Settings is reachable from the deck and from the pairing screen, so accounts that are not paired yet can delete themselves too.
+
+Contact: warmth@dbtvault-solutions.tech
