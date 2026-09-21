@@ -464,9 +464,11 @@ export default function Home() {
           <TouchableOpacity
             style={{ position: 'absolute', top: 76, right: 20, justifyContent: 'center' }}
             hitSlop={{ top: 18, bottom: 18, left: 14, right: 14 }}
-            onPress={async () => { await clearToken(); setUser(null); setCouple(null); setMyInvite(''); }}
+            // Settings, not a bare Logout: an account that isn't paired yet must still
+            // reach Delete account (App Store 5.1.1(v)), Help and Log out.
+            onPress={() => router.push('/settings')}
           >
-            <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '500' }}>Logout</Text>
+            <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '500' }}>Settings</Text>
           </TouchableOpacity>
 
           {myInvite ? (
