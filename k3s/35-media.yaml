@@ -31,17 +31,24 @@ spec:
                   - key: tier
                     operator: In
                     values: ["primary", "backup"]
-        # Spread the two replicas onto different nodes for real HA.
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchLabels: { app: warmth-media }
-                topologyKey: kubernetes.io/hostname
+      # Same spread rule as warmth-api (30-api.yaml). Replaces the earlier
+      # *preferred* podAntiAffinity, which counted OLD pods during a rollout and
+      # let both new replicas land on one node (seen 2026-09-22 after coral test).
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          # Ignore tainted (unreachable) nodes so a replacement can still be
+          # scheduled on the surviving node during a node outage.
+          nodeTaintsPolicy: Honor
+          # Count only same-revision pods. Needs k8s 1.30+ (have 1.34).
+          matchLabelKeys: ["pod-template-hash"]
+          labelSelector:
+            matchLabels:
+              app: warmth-media
       containers:
         - name: nginx
-          image: ghcr.io/darkarchonful/warmth-media:v7
+          image: ghcr.io/darkarchonful/warmth-media:v8
           ports:
             - containerPort: 80
           readinessProbe:
