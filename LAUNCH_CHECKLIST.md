@@ -52,7 +52,7 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ⬜ Final copy pass on cards / onboarding
 
 ## 7. Backend / infra hardening (from prod-gaps)
-- ⬜ **Restore re-pair cooldown post-launch** — set `REPAIR_COOLDOWN_HOURS: "48"` in `k3s/30-api.yaml` + re-apply (disabled at 0 for testing/review, code intact)
+- ✅ **Re-pair cooldown restored to 48 h** — 2026-09-24, `k3s/30-api.yaml` applied, verified on both pods
 - ⬜ **Set invite install link at launch** — set `EXPO_PUBLIC_INVITE_URL` to the App Store URL (+ Play later) and OTA; the invite share then appends "Get it here: <url>" so an unpartnered person can install. Plumbing built in `app/app/index.js` (invite share), no-op until the env is set. No native build needed.
 - ⬜ TLS cert auto-renewal check (warmth-api + edge)
 - ⬜ CI/CD for API image build + deploy (currently manual docker build → kubectl)
@@ -65,6 +65,7 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 - ✅ **Push notifications verified 2026-09-17** on the owner's phone with the app closed: "Paired!", "You matched!" (tap opens Plans), comment push (tap opens the plan), approval + completion pushes. Partner side driven through the API.
 - ✅ **SUBMITTED FOR REVIEW 2026-09-17** — version 1.0.0, build 6, demo account + review notes attached. While "Waiting for Review / In Review": do not touch the demo accounts (`appreview@…`, `appreview.partner@…`) or their data, keep `DEMO_EMAIL`/`DEMO_CODE` and `REPAIR_COOLDOWN_HOURS=0` in place, avoid risky API deploys and native changes, keep OTAs to fixes only.
 - ⏳ **2026-09-18 Apple: Guideline 2.1 "Information Needed – New App Submission"** (standard request for accounts with limited review history, not an app defect). **Replied 2026-09-21** with the screen recording (demo walkthrough + register/delete a throwaway account) and the written answers (`docs/APP_REVIEW_REPLY_PASTE.txt`, under the 4000-char field limit). Fixed on the way, all via OTA: Settings → Help (support / report / privacy), branded support address `warmth@dbtvault-solutions.tech`, contact dialog instead of bare mailto, and a **Settings link on the pairing screen** so unpaired accounts can delete themselves (5.1.1(v)). Demo couple re-seeded after recording. Same text + the recording also saved in App Review Information (Notes + attachment). Because editing the review information left **Resubmit to App Review** as the only action (Apple's help page: an edited rejected submission moves forward via Resubmit; forum reports are split on whether a reply alone is read), the submission was **RESUBMITTED 2026-09-21** with build 6 unchanged. Waiting for Apple (typically 24–48 h).
+- ✅ **APPROVED 2026-09-24** ("approved for distribution") after a real review session at 02:40 UTC (Sign in with Apple + demo login + swipes + memories + plan completion, 73 requests, 0 errors). Launch steps: re-pair cooldown restored to 48 h (API re-applied), demo couple re-seeded (demo bypass KEPT — updates get re-reviewed), invite install link to be set once the App Store page is live.
 
 ---
 
