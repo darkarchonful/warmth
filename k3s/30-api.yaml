@@ -25,6 +25,7 @@ spec:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: DoNotSchedule
+          nodeTaintsPolicy: Honor
           # Count only same-revision pods, so a rolling update's OLD pods don't
           # skew the calc and let both new replicas land on one node (which is
           # exactly how both ended up on Hetzner). Needs k8s 1.30+ (have 1.34).
@@ -74,10 +75,9 @@ spec:
               value: "0"
             - name: DAILY_SWIPE_LIMIT
               value: "8"
-            # Re-pair cooldown in hours; 0 = disabled for testing/App Review.
-            # TODO: set to 48 post-launch to restore anti-churn protection.
+            # Re-pair cooldown in hours (anti-churn). Was 0 during testing/App Review; restored to 48 at launch (2026-09-24).
             - name: REPAIR_COOLDOWN_HOURS
-              value: "0"
+              value: "48"
             # App Store review demo logins: these emails skip email send and
             # accept DEMO_CODE as a fixed login code (comma-separated allowlist —
             # reviewer account + partner, so matching can be tested across two
