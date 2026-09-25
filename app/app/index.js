@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, KeyboardAvoidingView, Platform, ScrollView, Keyboard, TouchableWithoutFeedback, Share } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
@@ -14,6 +15,12 @@ import Toast from '../components/Toast';
 // once EXPO_PUBLIC_INVITE_URL is set (e.g. the App Store URL at launch) — until
 // then the share text is unchanged. Flipping it on is env + OTA, no native build.
 const INVITE_URL = process.env.EXPO_PUBLIC_INVITE_URL || '';
+// One text for both Share and Copy, so a pasted invite carries the install link too.
+function inviteMessage(code) {
+  return INVITE_URL
+    ? `Let's pair on Warmth — use this code: ${code}\n\nDon't have the app yet? Get it here: ${INVITE_URL}`
+    : `Let's pair on Warmth — use this code: ${code}`;
+}
 
 // App Review demo accounts use a fixed login code and NO email is sent for them
 // (server: DEMO_EMAIL / DEMO_CODE). Reviewers were seen waiting for an email on
@@ -37,6 +44,7 @@ export default function Home() {
   const [myInvite, setMyInvite] = useState('');
   const [error, setError] = useState('');
   const [waitingDots, setWaitingDots] = useState('');
+  const [copied, setCopied] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [savingName, setSavingName] = useState(false);
   const [emailMode, setEmailMode] = useState(null); // null | 'email' | 'code'
@@ -232,6 +240,18 @@ export default function Home() {
   // Escape hatch from the name-confirm screen: if someone signed in with the
   // wrong account there's otherwise no way back. Clears the session and
   // returns to the login screen.
+  // Copy the same message Share sends (code + install link), and confirm briefly.
+  async function copyInvite() {
+    if (!myInvite) return;
+    try {
+      await Clipboard.setStringAsync(inviteMessage(myInvite));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   async function signOut() {
     await clearToken();
     setUser(null);
@@ -490,15 +510,15 @@ export default function Home() {
           {myInvite ? (
             <View style={styles.inviteBox}>
               <Text style={styles.inviteLabel}>Share this code:</Text>
-              <Text style={styles.inviteCode}>{myInvite}</Text>
+              <TouchableOpacity onPress={copyInvite} hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }}>
+                <Text style={styles.inviteCode}>{myInvite}</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.button, { marginTop: 12, paddingVertical: 10, paddingHorizontal: 24 }]}
                 onPress={async () => {
                   try {
                     await Share.share({
-                      message: INVITE_URL
-                        ? `Let's pair on Warmth — use this code: ${myInvite}\n\nDon't have the app yet? Get it here: ${INVITE_URL}`
-                        : `Let's pair on Warmth — use this code: ${myInvite}`,
+                      message: inviteMessage(myInvite),
                       ...(INVITE_URL ? { url: INVITE_URL } : {}),
                     });
                   } catch (e) {
@@ -508,7 +528,12 @@ export default function Home() {
               >
                 <Text style={styles.buttonText}>Share</Text>
               </TouchableOpacity>
-              <Text style={styles.waitingLine}>Waiting for partner{waitingDots}</Text>
+              <TouchableOpacity onPress={copyInvite} style={{ marginTop: 10 }} hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }}>
+                <Text style={styles.cancelLine}>Copy invite message</Text>
+              </TouchableOpacity>
+              <Text style={styles.waitingLine}>
+                {copied ? 'Copied — paste it to your partner' : `Waiting for partner${waitingDots}`}
+              </Text>
               <TouchableOpacity
                 style={{ marginTop: 16 }}
                 onPress={async () => {
