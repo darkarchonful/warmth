@@ -53,7 +53,7 @@ Public iOS launch readiness. Status legend: ✅ done · ⏳ in progress · ⬜ n
 
 ## 7. Backend / infra hardening (from prod-gaps)
 - ✅ **Re-pair cooldown restored to 48 h** — 2026-09-24, `k3s/30-api.yaml` applied, verified on both pods
-- ⬜ **Set invite install link at launch** — set `EXPO_PUBLIC_INVITE_URL` to the App Store URL (+ Play later) and OTA; the invite share then appends "Get it here: <url>" so an unpartnered person can install. Plumbing built in `app/app/index.js` (invite share), no-op until the env is set. No native build needed.
+- ✅ **Invite install link set 2026-09-25** — `EXPO_PUBLIC_INVITE_URL=https://apps.apple.com/app/id6808587453` published via OTA (runtime eca14527) and added to the `warmth-metro-prod` systemd env; the invite share now appends "Don't have the app yet? Get it here: <link>". Play Store link to be added later.
 - ⬜ TLS cert auto-renewal check (warmth-api + edge)
 - ⬜ CI/CD for API image build + deploy (currently manual docker build → kubectl)
 - ⬜ Basic observability (error logging/alerting on the API + scheduler)
