@@ -517,19 +517,16 @@ export default function Home() {
                 style={[styles.button, { marginTop: 12, paddingVertical: 10, paddingHorizontal: 24 }]}
                 onPress={async () => {
                   try {
-                    await Share.share({
-                      message: inviteMessage(myInvite),
-                      ...(INVITE_URL ? { url: INVITE_URL } : {}),
-                    });
+                    // Message only. Passing a separate `url` makes iOS treat it as a
+                    // second item and apps like Messages then share ONLY the link,
+                    // dropping the invite code (seen 2026-09-25).
+                    await Share.share({ message: inviteMessage(myInvite) });
                   } catch (e) {
                     setError(e.message);
                   }
                 }}
               >
                 <Text style={styles.buttonText}>Share</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={copyInvite} style={{ marginTop: 10 }} hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }}>
-                <Text style={styles.cancelLine}>Copy invite message</Text>
               </TouchableOpacity>
               <Text style={styles.waitingLine}>
                 {copied ? 'Copied — paste it to your partner' : `Waiting for partner${waitingDots}`}
