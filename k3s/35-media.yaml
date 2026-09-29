@@ -48,7 +48,7 @@ spec:
               app: warmth-media
       containers:
         - name: nginx
-          image: ghcr.io/darkarchonful/warmth-media:v8
+          image: ghcr.io/darkarchonful/warmth-media:v9
           ports:
             - containerPort: 80
           readinessProbe:
