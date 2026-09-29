@@ -800,6 +800,42 @@ function currentSeason(month) {
 }
 
 // Get next activity to swipe
+// Daily swipe ration, shared by the deck (GET /activities/next) and the swipe
+// itself (POST /activities/:id/swipe) so the cap is exact: the client keeps a
+// local queue of cards, so gating only the deck let people swipe past the cap
+// until the queue ran dry, and the "enough for today" screen showed up late.
+// Spread-day heuristic: ~1/3 of days, fewer cards early, full cap by evening.
+// Completing a plan today earns one extra swipe each. App Review demo accounts
+// and DISABLE_SWIPE_LIMIT=1 are exempt.
+async function dailyAllowance(user, coupleId) {
+  const unlimited =
+    process.env.DISABLE_SWIPE_LIMIT === '1' ||
+    DEMO_EMAILS.includes(user.email);
+  const BASE_CAP = parseInt(process.env.DAILY_SWIPE_LIMIT || '8', 10);
+  const today = new Date();
+  const dateKey = today.toISOString().slice(0, 10);
+  const hash = (user.id * 31 + parseInt(dateKey.replace(/-/g, ''), 10)) % 3;
+  const spreadDay = hash === 0 && !unlimited;
+  const hour = today.getHours();
+  let cap = BASE_CAP;
+  if (spreadDay) {
+    if (hour < 12) cap = 3;
+    else if (hour < 18) cap = 6;
+    else cap = BASE_CAP;
+  }
+  const doneToday = await pool.query(
+    "SELECT COUNT(*)::int AS n FROM checklist WHERE couple_id = $1 AND status = 'done' AND updated_at::date = CURRENT_DATE",
+    [coupleId]
+  );
+  cap += doneToday.rows[0].n;
+  const swipedToday = await pool.query(
+    "SELECT COUNT(*)::int AS n FROM swipes WHERE user_id = $1 AND swiped_at::date = CURRENT_DATE",
+    [user.id]
+  );
+  const swiped = swipedToday.rows[0].n;
+  return { unlimited, cap, swiped, spreadDay, hour, reached: !unlimited && swiped >= cap };
+}
+
 app.get('/activities/next', auth, async (req, res) => {
   const couple = await pool.query(
     'SELECT id FROM couples WHERE (user_a_id = $1 OR user_b_id = $1) AND active = TRUE AND user_b_id IS NOT NULL',
@@ -838,36 +874,11 @@ app.get('/activities/next', auth, async (req, res) => {
     });
   }
 
-  // Daily ration with spread days and completion bonus.
-  // Spread-day heuristic: ~1/3 of days, fewer cards early, full cap by evening.
-  // App Review demo accounts are exempt from the daily cap so a reviewer can
-  // explore the deck freely without hitting "come back tomorrow".
-  const disableLimit =
-    process.env.DISABLE_SWIPE_LIMIT === '1' ||
-    DEMO_EMAILS.includes(req.user.email);
-  const BASE_CAP = parseInt(process.env.DAILY_SWIPE_LIMIT || '8', 10);
-  const today = new Date();
-  const dateKey = today.toISOString().slice(0, 10);
-  const hash = (req.user.id * 31 + parseInt(dateKey.replace(/-/g, ''), 10)) % 3;
-  const spreadDay = hash === 0 && !disableLimit;
-  const hour = today.getHours();
-  let cap = BASE_CAP;
-  if (spreadDay) {
-    if (hour < 12) cap = 3;
-    else if (hour < 18) cap = 6;
-    else cap = BASE_CAP;
-  }
-  const doneToday = await pool.query(
-    "SELECT COUNT(*)::int AS n FROM checklist WHERE couple_id = $1 AND status = 'done' AND updated_at::date = CURRENT_DATE",
-    [coupleId]
-  );
-  cap += doneToday.rows[0].n;
-
-  const swipedToday = await pool.query(
-    "SELECT COUNT(*)::int AS n FROM swipes WHERE user_id = $1 AND swiped_at::date = CURRENT_DATE",
-    [req.user.id]
-  );
-  if (!disableLimit && swipedToday.rows[0].n >= cap) {
+  // Daily ration (see dailyAllowance): the same numbers gate the deck here and
+  // every swipe in POST /activities/:id/swipe.
+  const allowance = await dailyAllowance(req.user, coupleId);
+  const { spreadDay, hour } = allowance;
+  if (allowance.reached) {
     const preview = await pool.query(
       `SELECT image_url FROM activities
        WHERE image_url IS NOT NULL AND id NOT IN (
@@ -1121,6 +1132,15 @@ app.post('/activities/:id/swipe', auth, async (req, res) => {
   }
   const c = couple.rows[0];
 
+  // Exact daily cap. Already at the cap: do not record, tell the client to show
+  // "enough for today" now. Otherwise record, and flag the swipe that uses up
+  // the last one so the client switches screens immediately.
+  const allowance = await dailyAllowance(req.user, c.id);
+  if (allowance.reached) {
+    return res.json({ match: false, limit_reached: true, recorded: false });
+  }
+  const limitReached = !allowance.unlimited && allowance.swiped + 1 >= allowance.cap;
+
   // First swipe: plain insert. Re-swipe (after a 30d-old skip): update the
   // existing row, bump re_show_count so we never resurface it again. The
   // WHERE on the upsert restricts the update to that one case so an
@@ -1172,11 +1192,11 @@ app.post('/activities/:id/swipe', auth, async (req, res) => {
       // Acting user sees the match modal, not a plan dot for the plan they
       // just created by matching — mark it seen for them.
       await markSelfSeen(req.user.id, 'plan');
-      return res.json({ match: true, message: 'You both want this!', first_match: firstMatch });
+      return res.json({ match: true, message: 'You both want this!', first_match: firstMatch, limit_reached: limitReached });
     }
   }
 
-  res.json({ match: false });
+  res.json({ match: false, limit_reached: limitReached });
 });
 
 // Get checklist. Each item carries per-viewer fields so the UI can show
