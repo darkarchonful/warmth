@@ -322,6 +322,10 @@ export default function Swipe() {
     }
     try {
       const result = await api.swipe(current.id, liked);
+      // That swipe used up today's ration: drop the cached cards so the next
+      // load hits the server and shows "enough for today" right away, instead
+      // of a few cached cards later.
+      if (result.limit_reached) queueRef.current = [];
       if (result.match) {
         // A new plan was just created. Drop the locally cached deck so the next
         // card forces a fresh /activities/next — that's where the 3-plan gate is
