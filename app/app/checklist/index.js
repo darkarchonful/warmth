@@ -6,6 +6,7 @@ import { colors } from '../../lib/colors';
 import { api, API_URL } from '../../lib/api';
 import Paywall from '../../components/Paywall';
 import CoachCard from '../../components/CoachCard';
+import { maybeAskForReview } from '../../lib/review';
 
 function resolveImage(url) {
   if (!url) return null;
@@ -49,6 +50,8 @@ export default function Checklist() {
       if (result?.first_completion) {
         setCoachMemoryId(result.memory_id ?? null);
         setCoachDone(true);
+      } else {
+        maybeAskForReview();
       }
       load();
     } catch (e) {
